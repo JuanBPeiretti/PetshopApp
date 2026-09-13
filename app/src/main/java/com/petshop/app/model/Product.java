@@ -1,6 +1,13 @@
 package com.petshop.app.model;
 
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+
+@Entity
+@Table(name = "products")
 public class Product {
+    @Id
     public String id;
     public String name;
     public String brand;
@@ -8,7 +15,7 @@ public class Product {
     public Double oldPrice;
     public double rating;
     public String imageUrl;
-    public String badge; // e.g., "Oferta", "Nuevo"
+    public String badge;
     public String categoryId;
     public int stock;
 

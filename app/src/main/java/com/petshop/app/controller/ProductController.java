@@ -1,28 +1,27 @@
 package com.petshop.app.controller;
 
 import com.petshop.app.model.Product;
-import com.petshop.app.service.InMemoryStore;
+import com.petshop.app.repository.ProductRepository;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Comparator;
 import java.util.List;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/products")
 public class ProductController {
 
-    private final InMemoryStore store;
+    private final ProductRepository productRepository;
 
-    public ProductController(InMemoryStore store) {
-        this.store = store;
+    public ProductController(ProductRepository productRepository) {
+        this.productRepository = productRepository;
     }
 
     @GetMapping
     public List<Product> list(@RequestParam(required = false) String category, @RequestParam(required = false) String sort) {
-        List<Product> filtered = store.products.stream()
-                .filter(p -> category == null || p.categoryId.equalsIgnoreCase(category))
-                .collect(Collectors.toList());
+        List<Product> filtered = (category == null || category.isBlank())
+                ? productRepository.findAll()
+                : productRepository.findByCategoryIdIgnoreCase(category);
 
         if ("Menor precio".equalsIgnoreCase(sort) || "menorprecio".equalsIgnoreCase(sort)) {
             filtered.sort(Comparator.comparingDouble(p -> p.price));
@@ -35,6 +34,6 @@ public class ProductController {
 
     @GetMapping("/{id}")
     public Product get(@PathVariable String id) {
-        return store.findProduct(id).orElse(null);
+        return productRepository.findById(id).orElse(null);
     }
 }

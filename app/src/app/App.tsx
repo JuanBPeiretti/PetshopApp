@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { HomeScreen } from "./screens/HomeScreen";
 import { ProductsScreen } from "./screens/ProductsScreen";
-import { CategoriesScreen } from "./screens/CategoriesScreen";
 import { CartScreen } from "./screens/CartScreen";
 import { LoginScreen } from "./screens/LoginScreen";
+import { ProductDetailScreen } from "./screens/ProductDetailScreen";
+import { OffersScreen } from "./screens/OffersScreen";
 import {
   addToCart,
   AUTH_TOKEN_KEY,
   AUTH_USER_KEY,
+  checkoutCart,
   fetchCart,
   fetchCategories,
   fetchCurrentUser,
@@ -33,6 +35,7 @@ function App() {
   const [authLoading, setAuthLoading] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [sort, setSort] = useState("");
+  const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
 
   const cartCount = useMemo(
     () => cartItems.reduce((total, item) => total + item.quantity, 0),
@@ -91,6 +94,11 @@ function App() {
     }
   }, [authToken]);
 
+  const selectedProduct = useMemo(
+    () => products.find((product) => product.id === selectedProductId) ?? null,
+    [products, selectedProductId],
+  );
+
   const handleLogin = async ({ email, password, name }: { email: string; password: string; name?: string }) => {
     if (!email || !password) {
       setAuthError("Completa email y contraseña.");
@@ -119,11 +127,17 @@ function App() {
     }
   };
 
+  const navigateTo = (nextView: View) => {
+    setSelectedProductId(null);
+    setView(nextView);
+  };
+
   const handleLogout = () => {
     localStorage.removeItem(AUTH_TOKEN_KEY);
     localStorage.removeItem(AUTH_USER_KEY);
     setAuthToken(null);
     setCurrentUser(null);
+    setSelectedProductId(null);
     setView("home");
   };
 
@@ -138,6 +152,7 @@ function App() {
       };
       const updated = await addToCart(authToken, nextItem);
       setCartItems(updated);
+      setView("cart");
     } catch (error) {
       console.error("Error agregando al carrito", error);
     }
@@ -152,25 +167,29 @@ function App() {
     }
   };
 
-  const handleCheckout = () => {
-    alert("Compra simulada completada.");
-    setCartItems([]);
+  const handleCheckout = async () => {
+    try {
+      await checkoutCart(authToken);
+      setCartItems([]);
+      alert("Compra simulada completada.");
+    } catch (error) {
+      console.error("Error al finalizar la compra", error);
+      alert("No se pudo completar la compra.");
+    }
   };
 
   const handleAddQty = async (product: Product) => {
     await handleAddToCart(product);
   };
 
-  const openProduct = async (id: string) => {
-    try {
-      const product = await fetchProducts();
-      const found = product.find((entry) => entry.id === id);
-      if (found) {
-        await handleAddToCart(found);
-      }
-    } catch (error) {
-      console.error("No se pudo abrir el producto", error);
-    }
+  const openProduct = (id: string) => {
+    setSelectedProductId(id);
+    setView("products");
+  };
+
+  const handleProductDetailBack = () => {
+    setSelectedProductId(null);
+    setView("products");
   };
 
   const renderScreen = () => {
@@ -186,11 +205,8 @@ function App() {
       );
     }
 
-    if (view === "categories") {
-      return <CategoriesScreen categories={categories} onSelectCategory={(categoryId) => {
-        setSelectedCategory(categoryId);
-        setView("products");
-      }} />;
+    if (view === "products" && selectedProductId && selectedProduct) {
+      return <ProductDetailScreen product={selectedProduct} onBack={handleProductDetailBack} onAddToCart={handleAddToCart} />;
     }
 
     if (view === "products") {
@@ -200,8 +216,14 @@ function App() {
           loading={productLoading}
           categoryFilter={selectedCategory}
           sort={sort}
-          onCategoryChange={setSelectedCategory}
-          onSortChange={setSort}
+          onCategoryChange={(categoryId) => {
+            setSelectedCategory(categoryId);
+            void loadProducts(categoryId, sort);
+          }}
+          onSortChange={(nextSort) => {
+            setSort(nextSort);
+            void loadProducts(selectedCategory, nextSort);
+          }}
           onAddToCart={handleAddToCart}
           onOpenProduct={openProduct}
         />
@@ -212,12 +234,16 @@ function App() {
       return <CartScreen items={cartItems} onRemove={handleRemoveFromCart} onCheckout={handleCheckout} onAddQty={handleAddQty} />;
     }
 
+    if (view === "offers") {
+      return <OffersScreen products={products} onAddToCart={handleAddToCart} onOpenProduct={openProduct} />;
+    }
+
     return (
       <HomeScreen
         categories={categories}
         products={products}
         currentUser={currentUser}
-        onNavigate={setView}
+        onNavigate={navigateTo}
         onAddToCart={handleAddToCart}
       />
     );
@@ -235,16 +261,16 @@ function App() {
 
       <nav className="main-nav">
         <div className="nav-inner">
-          <button className="brand" onClick={() => setView("home")}>
+          <button className="brand" onClick={() => navigateTo("home")}>
             <span className="brand-mark">🐾</span>
             <span>Petshop</span>
           </button>
 
           <div className="nav-links">
-            <button onClick={() => setView("home")}>Inicio</button>
-            <button onClick={() => setView("products")}>Productos</button>
-            <button onClick={() => setView("categories")}>Categorías</button>
-            <button onClick={() => setView("cart")}>Carrito ({cartCount})</button>
+            <button onClick={() => navigateTo("home")}>Inicio</button>
+            <button onClick={() => navigateTo("products")}>Productos</button>
+            <button onClick={() => navigateTo("offers")}>Ofertas</button>
+            <button onClick={() => navigateTo("cart")}>Carrito ({cartCount})</button>
           </div>
 
           <div className="nav-actions">
@@ -254,7 +280,7 @@ function App() {
                 <button className="secondary-btn" onClick={handleLogout}>Salir</button>
               </>
             ) : (
-              <button className="primary-btn" onClick={() => setView("login")}>Iniciar sesión</button>
+              <button className="primary-btn" onClick={() => navigateTo("login")}>Iniciar sesión</button>
             )}
           </div>
         </div>

@@ -32,4 +32,4 @@ export type User = {
   password?: string;
 };
 
-export type View = "home" | "products" | "categories" | "cart" | "login";
+export type View = "home" | "products" | "offers" | "categories" | "cart" | "login";
