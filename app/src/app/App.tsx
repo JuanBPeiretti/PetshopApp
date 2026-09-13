@@ -36,6 +36,7 @@ function App() {
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [sort, setSort] = useState("");
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+  const [theme, setTheme] = useState<"light" | "soft" | "dark">("soft");
 
   const cartCount = useMemo(
     () => cartItems.reduce((total, item) => total + item.quantity, 0),
@@ -250,7 +251,7 @@ function App() {
   };
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell theme-${theme}`}>
       <header className="topbar">
         <div className="topbar-inner">
           <span>🚚 Envíos a todo el país</span>
@@ -274,6 +275,33 @@ function App() {
           </div>
 
           <div className="nav-actions">
+            <div className="theme-switcher" aria-label="selector de tema">
+              <button
+                className={theme === "light" ? "theme-option active" : "theme-option"}
+                onClick={() => setTheme("light")}
+                aria-label="Tema claro"
+                title="Tema claro"
+              >
+                ☀️
+              </button>
+              <button
+                className={theme === "soft" ? "theme-option active" : "theme-option"}
+                onClick={() => setTheme("soft")}
+                aria-label="Tema medio"
+                title="Tema medio"
+              >
+                ◐
+              </button>
+              <button
+                className={theme === "dark" ? "theme-option active" : "theme-option"}
+                onClick={() => setTheme("dark")}
+                aria-label="Tema oscuro"
+                title="Tema oscuro"
+              >
+                🌙
+              </button>
+            </div>
+
             {currentUser ? (
               <>
                 <span className="user-pill">{currentUser.name}</span>
