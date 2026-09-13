@@ -1,26 +1,33 @@
 package com.petshop.app.controller;
 
+import com.petshop.app.model.ResetToken;
 import com.petshop.app.model.User;
+import com.petshop.app.repository.ResetTokenRepository;
+import com.petshop.app.repository.UserRepository;
 import com.petshop.app.service.InMemoryStore;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import java.time.Instant;
 
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
 
     private final InMemoryStore store;
+    private final UserRepository userRepository;
+    private final ResetTokenRepository resetTokenRepository;
     private static final Logger RESET_LOG = LoggerFactory.getLogger("resetTokenLogger");
 
-    public AuthController(InMemoryStore store) {
+    public AuthController(InMemoryStore store, UserRepository userRepository, ResetTokenRepository resetTokenRepository) {
         this.store = store;
+        this.userRepository = userRepository;
+        this.resetTokenRepository = resetTokenRepository;
     }
 
     @PostMapping("/login")
@@ -28,7 +35,7 @@ public class AuthController {
         String email = body.get("email");
         String password = body.get("password");
 
-        User u = store.users.get(email);
+        User u = userRepository.findByEmail(email).orElse(null);
         if (u != null && u.password.equals(password)) {
             String token = UUID.randomUUID().toString();
             store.sessions.put(token, u);
@@ -59,12 +66,12 @@ public class AuthController {
             return ResponseEntity.badRequest().body(Map.of("error","Faltan campos"));
         }
 
-        if (store.users.containsKey(email)) {
+        if (userRepository.findByEmail(email).isPresent()) {
             return ResponseEntity.status(409).body(Map.of("error","Usuario ya existe"));
         }
 
         User u = new User(UUID.randomUUID().toString(), email, password, name);
-        store.users.put(email, u);
+        userRepository.save(u);
         String token = UUID.randomUUID().toString();
         store.sessions.put(token, u);
         return ResponseEntity.ok(Map.of("token", token, "user", u));
@@ -73,17 +80,16 @@ public class AuthController {
     @PostMapping("/recover")
     public ResponseEntity<?> recover(@RequestBody Map<String,String> body) {
         String email = body.get("email");
-        if (email == null || !store.users.containsKey(email)) {
+        if (email == null || userRepository.findByEmail(email).isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("error","Email no registrado"));
         }
 
         String token = UUID.randomUUID().toString();
-        long expiry = System.currentTimeMillis() + (15 * 60 * 1000); // 15 minutes
-        com.petshop.app.model.ResetToken rt = new com.petshop.app.model.ResetToken(token, email, expiry);
-        store.resetTokens.put(token, rt);
+        long expiry = System.currentTimeMillis() + (15 * 60 * 1000);
+        ResetToken rt = new ResetToken(token, email, expiry);
+        resetTokenRepository.save(rt);
 
-        // Log via SLF4J/Logback so it can be managed/rotated centrally.
-        String msg = "[SIMULATED EMAIL] " + Instant.now().toString() + " | Password reset token for " + email + ": " + token + " (expires in 15 minutes)";
+        String msg = "[SIMULATED EMAIL] " + Instant.now() + " | Password reset token for " + email + ": " + token + " (expires in 15 minutes)";
         RESET_LOG.info(msg);
 
         return ResponseEntity.ok(Map.of("resetToken", token, "expiresInMinutes", 15));
@@ -97,24 +103,25 @@ public class AuthController {
             return ResponseEntity.badRequest().body(Map.of("error","Faltan campos"));
         }
 
-        com.petshop.app.model.ResetToken rt = store.resetTokens.get(token);
+        ResetToken rt = resetTokenRepository.findById(token).orElse(null);
         if (rt == null) {
             return ResponseEntity.badRequest().body(Map.of("error","Token inválido"));
         }
 
         if (rt.isExpired()) {
-            store.resetTokens.remove(token);
+            resetTokenRepository.delete(rt);
             return ResponseEntity.badRequest().body(Map.of("error","Token expirado"));
         }
 
         String email = rt.email;
-        User u = store.users.get(email);
+        User u = userRepository.findByEmail(email).orElse(null);
         if (u == null) {
             return ResponseEntity.badRequest().body(Map.of("error","Usuario no encontrado"));
         }
 
         u.password = newPassword;
-        store.resetTokens.remove(token);
-        return ResponseEntity.ok(Map.of("ok",true));
+        userRepository.save(u);
+        resetTokenRepository.delete(rt);
+        return ResponseEntity.ok(Map.of("ok", true));
     }
 }

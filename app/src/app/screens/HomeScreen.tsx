@@ -4,7 +4,7 @@ type Props = {
   categories: Category[];
   products: Product[];
   currentUser: User | null;
-  onNavigate: (view: "home" | "products" | "categories" | "cart" | "login") => void;
+  onNavigate: (view: "home" | "products" | "offers" | "categories" | "cart" | "login") => void;
   onAddToCart: (product: Product) => void;
 };
 
@@ -25,7 +25,7 @@ export function HomeScreen({ categories, products, currentUser, onNavigate, onAd
           </p>
           <div className="hero-actions">
             <button className="primary-btn" onClick={() => onNavigate("products")}>Ver productos</button>
-            <button className="secondary-btn" onClick={() => onNavigate("categories")}>Explorar categorías</button>
+            <button className="secondary-btn" onClick={() => onNavigate("offers")}>Ver ofertas</button>
           </div>
           <div className="hero-stats">
             <div>
@@ -54,7 +54,7 @@ export function HomeScreen({ categories, products, currentUser, onNavigate, onAd
       <section className="section-block">
         <div className="section-header">
           <h2>Categorías populares</h2>
-          <button className="text-link" onClick={() => onNavigate("categories")}>Ver todas</button>
+          <button className="text-link" onClick={() => onNavigate("products")}>Ver todas</button>
         </div>
         <div className="category-grid">
           {categories.map((category) => (

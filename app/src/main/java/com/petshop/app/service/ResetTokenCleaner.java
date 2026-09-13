@@ -1,24 +1,30 @@
 package com.petshop.app.service;
 
+import com.petshop.app.model.ResetToken;
+import com.petshop.app.repository.ResetTokenRepository;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+
+import java.util.List;
 
 @Component
 public class ResetTokenCleaner {
 
-    private final InMemoryStore store;
+    private final ResetTokenRepository resetTokenRepository;
 
-    public ResetTokenCleaner(InMemoryStore store) {
-        this.store = store;
+    public ResetTokenCleaner(ResetTokenRepository resetTokenRepository) {
+        this.resetTokenRepository = resetTokenRepository;
     }
 
-    @Scheduled(fixedRateString = "${petshop.reset.cleaner.rate:300000}") // configurable via application.properties (ms)
+    @Scheduled(fixedRateString = "${petshop.reset.cleaner.rate:300000}")
     public void clean() {
-        int before = store.resetTokens.size();
-        store.resetTokens.entrySet().removeIf(e -> e.getValue().isExpired());
-        int after = store.resetTokens.size();
-        if (before != after) {
-            System.out.println("[ResetTokenCleaner] Removed " + (before - after) + " expired tokens");
+        List<ResetToken> expired = resetTokenRepository.findAll().stream()
+                .filter(ResetToken::isExpired)
+                .toList();
+
+        if (!expired.isEmpty()) {
+            resetTokenRepository.deleteAll(expired);
+            System.out.println("[ResetTokenCleaner] Removed " + expired.size() + " expired tokens");
         }
     }
 }

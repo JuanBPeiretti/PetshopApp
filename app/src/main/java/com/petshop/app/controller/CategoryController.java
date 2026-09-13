@@ -1,7 +1,7 @@
 package com.petshop.app.controller;
 
 import com.petshop.app.model.Category;
-import com.petshop.app.service.InMemoryStore;
+import com.petshop.app.repository.CategoryRepository;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -12,14 +12,14 @@ import java.util.List;
 @RequestMapping("/api/categories")
 public class CategoryController {
 
-    private final InMemoryStore store;
+    private final CategoryRepository categoryRepository;
 
-    public CategoryController(InMemoryStore store) {
-        this.store = store;
+    public CategoryController(CategoryRepository categoryRepository) {
+        this.categoryRepository = categoryRepository;
     }
 
     @GetMapping
     public List<Category> list() {
-        return store.categories;
+        return categoryRepository.findAll();
     }
 }

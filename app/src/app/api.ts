@@ -5,12 +5,14 @@ export const AUTH_TOKEN_KEY = "petshop_auth_token";
 export const AUTH_USER_KEY = "petshop_auth_user";
 
 async function request<T>(input: string, init?: RequestInit): Promise<T> {
+  const headers = new Headers(init?.headers ?? {});
+  if (!headers.has("Content-Type") && !(init?.body instanceof FormData)) {
+    headers.set("Content-Type", "application/json");
+  }
+
   const response = await fetch(`${API_BASE_URL}${input}`, {
-    headers: {
-      "Content-Type": "application/json",
-      ...(init?.headers ?? {}),
-    },
     ...init,
+    headers,
   });
 
   if (!response.ok) {
@@ -93,5 +95,14 @@ export async function removeFromCart(token: string | null, item: CartItem): Prom
     method: "POST",
     headers,
     body: JSON.stringify(item),
+  });
+}
+
+export async function checkoutCart(token?: string | null): Promise<{ ok: boolean; items: CartItem[] }> {
+  const headers: Record<string, string> = {};
+  if (token) headers["X-Auth-Token"] = token;
+  return request<{ ok: boolean; items: CartItem[] }>("/cart/checkout", {
+    method: "POST",
+    headers,
   });
 }
