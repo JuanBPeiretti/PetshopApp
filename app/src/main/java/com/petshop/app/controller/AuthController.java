@@ -4,7 +4,8 @@ import com.petshop.app.model.ResetToken;
 import com.petshop.app.model.User;
 import com.petshop.app.repository.ResetTokenRepository;
 import com.petshop.app.repository.UserRepository;
-import com.petshop.app.service.InMemoryStore;
+import com.petshop.app.service.JwtUtil;
+import io.jsonwebtoken.JwtException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
@@ -19,13 +20,13 @@ import java.util.UUID;
 @RequestMapping("/api/auth")
 public class AuthController {
 
-    private final InMemoryStore store;
+    private final JwtUtil jwtUtil;
     private final UserRepository userRepository;
     private final ResetTokenRepository resetTokenRepository;
     private static final Logger RESET_LOG = LoggerFactory.getLogger("resetTokenLogger");
 
-    public AuthController(InMemoryStore store, UserRepository userRepository, ResetTokenRepository resetTokenRepository) {
-        this.store = store;
+    public AuthController(JwtUtil jwtUtil, UserRepository userRepository, ResetTokenRepository resetTokenRepository) {
+        this.jwtUtil = jwtUtil;
         this.userRepository = userRepository;
         this.resetTokenRepository = resetTokenRepository;
     }
@@ -37,8 +38,7 @@ public class AuthController {
 
         User u = userRepository.findByEmail(email).orElse(null);
         if (u != null && u.password.equals(password)) {
-            String token = UUID.randomUUID().toString();
-            store.sessions.put(token, u);
+            String token = jwtUtil.generateToken(u.id, u.email);
             Map<String,Object> resp = new HashMap<>();
             resp.put("token",token);
             resp.put("user",u);
@@ -50,8 +50,16 @@ public class AuthController {
 
     @GetMapping("/me")
     public ResponseEntity<?> me(@RequestHeader(value = "X-Auth-Token", required = false) String token) {
-        if (token != null && store.sessions.containsKey(token)) {
-            return ResponseEntity.ok(store.sessions.get(token));
+        if (token != null) {
+            try {
+                String userId = jwtUtil.extractUserId(token);
+                User u = userRepository.findById(userId).orElse(null);
+                if (u != null) {
+                    return ResponseEntity.ok(u);
+                }
+            } catch (JwtException | IllegalArgumentException e) {
+                // falls through to 401 below
+            }
         }
         return ResponseEntity.status(401).body(Map.of("error","No autorizado"));
     }
@@ -72,8 +80,7 @@ public class AuthController {
 
         User u = new User(UUID.randomUUID().toString(), email, password, name);
         userRepository.save(u);
-        String token = UUID.randomUUID().toString();
-        store.sessions.put(token, u);
+        String token = jwtUtil.generateToken(u.id, u.email);
         return ResponseEntity.ok(Map.of("token", token, "user", u));
     }
 
