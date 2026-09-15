@@ -1,13 +1,16 @@
 package com.petshop.app.controller;
 
+import com.petshop.app.dto.UserDTO;
 import com.petshop.app.model.ResetToken;
 import com.petshop.app.model.User;
 import com.petshop.app.repository.ResetTokenRepository;
 import com.petshop.app.repository.UserRepository;
-import com.petshop.app.service.InMemoryStore;
+import com.petshop.app.service.JwtUtil;
+import io.jsonwebtoken.JwtException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
@@ -19,29 +22,29 @@ import java.util.UUID;
 @RequestMapping("/api/auth")
 public class AuthController {
 
-    private final InMemoryStore store;
+    private final JwtUtil jwtUtil;
     private final UserRepository userRepository;
     private final ResetTokenRepository resetTokenRepository;
+    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     private static final Logger RESET_LOG = LoggerFactory.getLogger("resetTokenLogger");
 
-    public AuthController(InMemoryStore store, UserRepository userRepository, ResetTokenRepository resetTokenRepository) {
-        this.store = store;
+    public AuthController(JwtUtil jwtUtil, UserRepository userRepository, ResetTokenRepository resetTokenRepository) {
+        this.jwtUtil = jwtUtil;
         this.userRepository = userRepository;
         this.resetTokenRepository = resetTokenRepository;
     }
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody Map<String,String> body) {
-        String email = body.get("email");
+        String email = body.get("email") != null ? body.get("email").trim() : null;
         String password = body.get("password");
 
         User u = userRepository.findByEmail(email).orElse(null);
-        if (u != null && u.password.equals(password)) {
-            String token = UUID.randomUUID().toString();
-            store.sessions.put(token, u);
+        if (u != null && passwordEncoder.matches(password, u.password)) {
+            String token = jwtUtil.generateToken(u.id, u.email);
             Map<String,Object> resp = new HashMap<>();
             resp.put("token",token);
-            resp.put("user",u);
+            resp.put("user",UserDTO.fromUser(u));
             return ResponseEntity.ok(resp);
         }
 
@@ -50,8 +53,16 @@ public class AuthController {
 
     @GetMapping("/me")
     public ResponseEntity<?> me(@RequestHeader(value = "X-Auth-Token", required = false) String token) {
-        if (token != null && store.sessions.containsKey(token)) {
-            return ResponseEntity.ok(store.sessions.get(token));
+        if (token != null) {
+            try {
+                String userId = jwtUtil.extractUserId(token);
+                User u = userRepository.findById(userId).orElse(null);
+                if (u != null) {
+                    return ResponseEntity.ok(UserDTO.fromUser(u));
+                }
+            } catch (JwtException | IllegalArgumentException e) {
+                // falls through to 401 below
+            }
         }
         return ResponseEntity.status(401).body(Map.of("error","No autorizado"));
     }
@@ -70,11 +81,10 @@ public class AuthController {
             return ResponseEntity.status(409).body(Map.of("error","Usuario ya existe"));
         }
 
-        User u = new User(UUID.randomUUID().toString(), email, password, name);
+        User u = new User(UUID.randomUUID().toString(), email, passwordEncoder.encode(password), name);
         userRepository.save(u);
-        String token = UUID.randomUUID().toString();
-        store.sessions.put(token, u);
-        return ResponseEntity.ok(Map.of("token", token, "user", u));
+        String token = jwtUtil.generateToken(u.id, u.email);
+        return ResponseEntity.ok(Map.of("token", token, "user", UserDTO.fromUser(u)));
     }
 
     @PostMapping("/recover")
@@ -119,7 +129,7 @@ public class AuthController {
             return ResponseEntity.badRequest().body(Map.of("error","Usuario no encontrado"));
         }
 
-        u.password = newPassword;
+        u.password = passwordEncoder.encode(newPassword);
         userRepository.save(u);
         resetTokenRepository.delete(rt);
         return ResponseEntity.ok(Map.of("ok", true));

@@ -2,9 +2,11 @@ package com.petshop.app.controller;
 
 import com.petshop.app.model.Product;
 import com.petshop.app.repository.ProductRepository;
+import com.petshop.app.service.PriceAscStrategy;
+import com.petshop.app.service.PriceDescStrategy;
+import com.petshop.app.service.ProductSortStrategy;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.Comparator;
 import java.util.List;
 
 @RestController
@@ -12,9 +14,13 @@ import java.util.List;
 public class ProductController {
 
     private final ProductRepository productRepository;
+    private final ProductSortStrategy priceAscStrategy;
+    private final ProductSortStrategy priceDescStrategy;
 
-    public ProductController(ProductRepository productRepository) {
+    public ProductController(ProductRepository productRepository, PriceAscStrategy priceAscStrategy, PriceDescStrategy priceDescStrategy) {
         this.productRepository = productRepository;
+        this.priceAscStrategy = priceAscStrategy;
+        this.priceDescStrategy = priceDescStrategy;
     }
 
     @GetMapping
@@ -23,13 +29,22 @@ public class ProductController {
                 ? productRepository.findAll()
                 : productRepository.findByCategoryIdIgnoreCase(category);
 
-        if ("Menor precio".equalsIgnoreCase(sort) || "menorprecio".equalsIgnoreCase(sort)) {
-            filtered.sort(Comparator.comparingDouble(p -> p.price));
-        } else if ("Mayor precio".equalsIgnoreCase(sort) || "mayorprecio".equalsIgnoreCase(sort)) {
-            filtered.sort(Comparator.comparingDouble((Product p) -> p.price).reversed());
+        ProductSortStrategy strategy = resolveStrategy(sort);
+        if (strategy != null) {
+            filtered = strategy.sort(filtered);
         }
 
         return filtered;
+    }
+
+    private ProductSortStrategy resolveStrategy(String sort) {
+        if ("Menor precio".equalsIgnoreCase(sort) || "menorprecio".equalsIgnoreCase(sort)) {
+            return priceAscStrategy;
+        }
+        if ("Mayor precio".equalsIgnoreCase(sort) || "mayorprecio".equalsIgnoreCase(sort)) {
+            return priceDescStrategy;
+        }
+        return null;
     }
 
     @GetMapping("/{id}")
