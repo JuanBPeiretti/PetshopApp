@@ -6,6 +6,7 @@ import com.petshop.app.model.User;
 import com.petshop.app.repository.ResetTokenRepository;
 import com.petshop.app.repository.UserRepository;
 import com.petshop.app.service.JwtUtil;
+import com.petshop.app.service.NotificationService;
 import io.jsonwebtoken.JwtException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,13 +26,15 @@ public class AuthController {
     private final JwtUtil jwtUtil;
     private final UserRepository userRepository;
     private final ResetTokenRepository resetTokenRepository;
+    private final NotificationService notificationService;
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     private static final Logger RESET_LOG = LoggerFactory.getLogger("resetTokenLogger");
 
-    public AuthController(JwtUtil jwtUtil, UserRepository userRepository, ResetTokenRepository resetTokenRepository) {
+    public AuthController(JwtUtil jwtUtil, UserRepository userRepository, ResetTokenRepository resetTokenRepository, NotificationService notificationService) {
         this.jwtUtil = jwtUtil;
         this.userRepository = userRepository;
         this.resetTokenRepository = resetTokenRepository;
+        this.notificationService = notificationService;
     }
 
     @PostMapping("/login")
@@ -83,6 +86,7 @@ public class AuthController {
 
         User u = new User(UUID.randomUUID().toString(), email, passwordEncoder.encode(password), name);
         userRepository.save(u);
+        notificationService.notify(u.email, "¡Bienvenido a Petshop, " + u.name + "!");
         String token = jwtUtil.generateToken(u.id, u.email);
         return ResponseEntity.ok(Map.of("token", token, "user", UserDTO.fromUser(u)));
     }

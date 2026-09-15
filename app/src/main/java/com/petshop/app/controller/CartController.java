@@ -6,6 +6,7 @@ import com.petshop.app.repository.CartItemRepository;
 import com.petshop.app.repository.ProductRepository;
 import com.petshop.app.service.InMemoryStore;
 import com.petshop.app.service.JwtUtil;
+import com.petshop.app.service.NotificationService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -24,12 +25,14 @@ public class CartController {
     private final ProductRepository productRepository;
     private final CartItemRepository cartItemRepository;
     private final JwtUtil jwtUtil;
+    private final NotificationService notificationService;
 
-    public CartController(InMemoryStore store, ProductRepository productRepository, CartItemRepository cartItemRepository, JwtUtil jwtUtil) {
+    public CartController(InMemoryStore store, ProductRepository productRepository, CartItemRepository cartItemRepository, JwtUtil jwtUtil, NotificationService notificationService) {
         this.store = store;
         this.productRepository = productRepository;
         this.cartItemRepository = cartItemRepository;
         this.jwtUtil = jwtUtil;
+        this.notificationService = notificationService;
     }
 
     private String resolveToken(String token) {
@@ -127,6 +130,10 @@ public class CartController {
         } else {
             purchasedItems = cartItemRepository.findByUserId(userToken);
             cartItemRepository.deleteAll(purchasedItems);
+            if (!purchasedItems.isEmpty()) {
+                String email = jwtUtil.extractEmail(token);
+                notificationService.notify(email, "Tu compra de " + purchasedItems.size() + " producto(s) se realizó con éxito.");
+            }
         }
         return ResponseEntity.ok(Map.of("ok", true, "items", purchasedItems));
     }

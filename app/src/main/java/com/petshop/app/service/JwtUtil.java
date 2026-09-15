@@ -47,6 +47,10 @@ public class JwtUtil {
         return parseToken(token).getSubject();
     }
 
+    public String extractEmail(String token) {
+        return parseToken(token).get("email", String.class);
+    }
+
     public boolean isTokenValid(String token) {
         try {
             parseToken(token);

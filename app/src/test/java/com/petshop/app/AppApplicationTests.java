@@ -7,6 +7,7 @@ import com.petshop.app.repository.CartItemRepository;
 import com.petshop.app.repository.ProductRepository;
 import com.petshop.app.service.InMemoryStore;
 import com.petshop.app.service.JwtUtil;
+import com.petshop.app.service.NotificationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.ResponseEntity;
@@ -20,6 +21,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class AppApplicationTests {
@@ -31,6 +34,7 @@ class AppApplicationTests {
     private CartItemRepository cartItemRepository;
     private List<CartItem> persistedCart;
     private JwtUtil jwtUtil;
+    private NotificationService notificationService;
     private CartController cartController;
 
     @BeforeEach
@@ -55,7 +59,8 @@ class AppApplicationTests {
             return null;
         }).when(cartItemRepository).deleteAll(any());
 
-        cartController = new CartController(store, productRepository, cartItemRepository, jwtUtil);
+        notificationService = mock(NotificationService.class);
+        cartController = new CartController(store, productRepository, cartItemRepository, jwtUtil, notificationService);
     }
 
     @Test
@@ -99,6 +104,7 @@ class AppApplicationTests {
         Map<?, ?> body = (Map<?, ?>) checkout.getBody();
         assertThat(body.get("ok")).isEqualTo(true);
         assertThat(persistedCart).isEmpty();
+        verify(notificationService).notify("user1@example.com", "Tu compra de 1 producto(s) se realizó con éxito.");
     }
 
     @Test
@@ -124,5 +130,8 @@ class AppApplicationTests {
         assertThat(store.carts.get("guest")).hasSize(1);
         assertThat(store.carts.get("guest").get(0).quantity).isEqualTo(2);
         assertThat(persistedCart).isEmpty();
+
+        cartController.checkout(null);
+        verifyNoInteractions(notificationService);
     }
 }
