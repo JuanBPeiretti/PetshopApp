@@ -4,6 +4,7 @@ import com.petshop.app.model.CartItem;
 import com.petshop.app.model.Product;
 import com.petshop.app.repository.ProductRepository;
 import com.petshop.app.service.InMemoryStore;
+import com.petshop.app.service.JwtUtil;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -18,14 +19,19 @@ public class CartController {
 
     private final InMemoryStore store;
     private final ProductRepository productRepository;
+    private final JwtUtil jwtUtil;
 
-    public CartController(InMemoryStore store, ProductRepository productRepository) {
+    public CartController(InMemoryStore store, ProductRepository productRepository, JwtUtil jwtUtil) {
         this.store = store;
         this.productRepository = productRepository;
+        this.jwtUtil = jwtUtil;
     }
 
     private String resolveToken(String token) {
-        return (token == null || token.isBlank()) ? "guest" : token;
+        if (token == null || token.isBlank() || !jwtUtil.isTokenValid(token)) {
+            return "guest";
+        }
+        return jwtUtil.extractUserId(token);
     }
 
     @GetMapping
