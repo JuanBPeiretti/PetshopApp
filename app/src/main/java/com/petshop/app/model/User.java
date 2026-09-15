@@ -19,6 +19,8 @@ public class User {
 
     public String name;
 
+    public String role = "USER";
+
     public User() {}
 
     public User(String id, String email, String password, String name) {

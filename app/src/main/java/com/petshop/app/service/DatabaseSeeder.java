@@ -8,6 +8,7 @@ import com.petshop.app.repository.ProductRepository;
 import com.petshop.app.repository.UserRepository;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -16,6 +17,7 @@ public class DatabaseSeeder implements ApplicationRunner {
     private final CategoryRepository categoryRepository;
     private final ProductRepository productRepository;
     private final UserRepository userRepository;
+    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     public DatabaseSeeder(CategoryRepository categoryRepository,
                           ProductRepository productRepository,
@@ -87,7 +89,11 @@ public class DatabaseSeeder implements ApplicationRunner {
         saveProductIfMissing(new Product("p50", "Comida húmeda para perros senior", "SeniorBites", 3699.0, 4399.0, 4.7, productImage("dog-food"), "Recomendado", "alimentos", 67));
 
         saveUserIfMissing(new User("u1", "cliente@ejemplo.com", "password", "Cliente Demo"));
-        saveUserIfMissing(new User("u2", "admin@petshop.com", "admin123", "Administrador"));
+
+        User admin = new User("u2", "admin@petshop.com", "admin123", "Administrador");
+        admin.role = "ADMIN";
+        saveUserIfMissing(admin);
+
         saveUserIfMissing(new User("u3", "juan@petshop.com", "123456", "Juan Petshop"));
     }
 
@@ -166,8 +172,21 @@ public class DatabaseSeeder implements ApplicationRunner {
     }
 
     private void saveUserIfMissing(User user) {
-        if (userRepository.findByEmail(user.email).isEmpty()) {
+        var existing = userRepository.findByEmail(user.email);
+        if (existing.isEmpty()) {
+            user.password = passwordEncoder.encode(user.password);
             userRepository.save(user);
+            return;
+        }
+
+        User existingUser = existing.get();
+        boolean needsRefresh = !existingUser.password.startsWith("$2") || !existingUser.role.equals(user.role);
+        if (needsRefresh) {
+            if (!existingUser.password.startsWith("$2")) {
+                existingUser.password = passwordEncoder.encode(existingUser.password);
+            }
+            existingUser.role = user.role;
+            userRepository.save(existingUser);
         }
     }
 }
