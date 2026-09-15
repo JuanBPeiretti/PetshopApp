@@ -1,8 +1,10 @@
 package com.petshop.app.controller;
 
 import com.petshop.app.model.CartItem;
+import com.petshop.app.model.Order;
 import com.petshop.app.model.Product;
 import com.petshop.app.repository.CartItemRepository;
+import com.petshop.app.repository.OrderRepository;
 import com.petshop.app.repository.ProductRepository;
 import com.petshop.app.service.InMemoryStore;
 import com.petshop.app.service.JwtUtil;
@@ -10,6 +12,7 @@ import com.petshop.app.service.NotificationService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -24,13 +27,16 @@ public class CartController {
     private final InMemoryStore store;
     private final ProductRepository productRepository;
     private final CartItemRepository cartItemRepository;
+    private final OrderRepository orderRepository;
     private final JwtUtil jwtUtil;
     private final NotificationService notificationService;
 
-    public CartController(InMemoryStore store, ProductRepository productRepository, CartItemRepository cartItemRepository, JwtUtil jwtUtil, NotificationService notificationService) {
+    public CartController(InMemoryStore store, ProductRepository productRepository, CartItemRepository cartItemRepository,
+                           OrderRepository orderRepository, JwtUtil jwtUtil, NotificationService notificationService) {
         this.store = store;
         this.productRepository = productRepository;
         this.cartItemRepository = cartItemRepository;
+        this.orderRepository = orderRepository;
         this.jwtUtil = jwtUtil;
         this.notificationService = notificationService;
     }
@@ -129,11 +135,17 @@ public class CartController {
             }
         } else {
             purchasedItems = cartItemRepository.findByUserId(userToken);
-            cartItemRepository.deleteAll(purchasedItems);
             if (!purchasedItems.isEmpty()) {
+                List<Order.OrderItem> orderItems = purchasedItems.stream()
+                        .map(i -> new Order.OrderItem(i.productId, i.quantity, i.price))
+                        .toList();
+                double total = purchasedItems.stream().mapToDouble(i -> i.price * i.quantity).sum();
+                orderRepository.save(new Order(userToken, Instant.now(), orderItems, total, "COMPLETADA"));
+
                 String email = jwtUtil.extractEmail(token);
                 notificationService.notify(email, "Tu compra de " + purchasedItems.size() + " producto(s) se realizó con éxito.");
             }
+            cartItemRepository.deleteAll(purchasedItems);
         }
         return ResponseEntity.ok(Map.of("ok", true, "items", purchasedItems));
     }

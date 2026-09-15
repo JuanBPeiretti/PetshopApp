@@ -3,7 +3,9 @@ package com.petshop.app;
 import com.petshop.app.controller.CartController;
 import com.petshop.app.model.CartItem;
 import com.petshop.app.model.Product;
+import com.petshop.app.model.Order;
 import com.petshop.app.repository.CartItemRepository;
+import com.petshop.app.repository.OrderRepository;
 import com.petshop.app.repository.ProductRepository;
 import com.petshop.app.service.InMemoryStore;
 import com.petshop.app.service.JwtUtil;
@@ -33,6 +35,8 @@ class AppApplicationTests {
     private ProductRepository productRepository;
     private CartItemRepository cartItemRepository;
     private List<CartItem> persistedCart;
+    private OrderRepository orderRepository;
+    private List<Order> savedOrders;
     private JwtUtil jwtUtil;
     private NotificationService notificationService;
     private CartController cartController;
@@ -59,8 +63,16 @@ class AppApplicationTests {
             return null;
         }).when(cartItemRepository).deleteAll(any());
 
+        savedOrders = new ArrayList<>();
+        orderRepository = mock(OrderRepository.class);
+        when(orderRepository.save(any(Order.class))).thenAnswer(inv -> {
+            Order saved = inv.getArgument(0);
+            savedOrders.add(saved);
+            return saved;
+        });
+
         notificationService = mock(NotificationService.class);
-        cartController = new CartController(store, productRepository, cartItemRepository, jwtUtil, notificationService);
+        cartController = new CartController(store, productRepository, cartItemRepository, orderRepository, jwtUtil, notificationService);
     }
 
     @Test
@@ -105,6 +117,16 @@ class AppApplicationTests {
         assertThat(body.get("ok")).isEqualTo(true);
         assertThat(persistedCart).isEmpty();
         verify(notificationService).notify("user1@example.com", "Tu compra de 1 producto(s) se realizó con éxito.");
+
+        assertThat(savedOrders).hasSize(1);
+        Order order = savedOrders.get(0);
+        assertThat(order.userId).isEqualTo("user-1");
+        assertThat(order.estado).isEqualTo("COMPLETADA");
+        assertThat(order.total).isEqualTo(1900.0);
+        assertThat(order.items).hasSize(1);
+        assertThat(order.items.get(0).productId).isEqualTo("p-cart-1");
+        assertThat(order.items.get(0).quantity).isEqualTo(2);
+        assertThat(order.items.get(0).price).isEqualTo(950.0);
     }
 
     @Test
@@ -133,5 +155,6 @@ class AppApplicationTests {
 
         cartController.checkout(null);
         verifyNoInteractions(notificationService);
+        verifyNoInteractions(orderRepository);
     }
 }
