@@ -1,5 +1,6 @@
 package com.petshop.app.model;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -20,6 +21,7 @@ public class CartItem {
     public int quantity;
     public double price;
 
+    @JsonCreator
     public CartItem() {}
 
     public CartItem(String productId, String name, String variant, int quantity, double price) {
