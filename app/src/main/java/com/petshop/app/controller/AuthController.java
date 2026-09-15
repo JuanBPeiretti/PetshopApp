@@ -1,5 +1,6 @@
 package com.petshop.app.controller;
 
+import com.petshop.app.dto.UserDTO;
 import com.petshop.app.model.ResetToken;
 import com.petshop.app.model.User;
 import com.petshop.app.repository.ResetTokenRepository;
@@ -43,7 +44,7 @@ public class AuthController {
             String token = jwtUtil.generateToken(u.id, u.email);
             Map<String,Object> resp = new HashMap<>();
             resp.put("token",token);
-            resp.put("user",u);
+            resp.put("user",UserDTO.fromUser(u));
             return ResponseEntity.ok(resp);
         }
 
@@ -57,7 +58,7 @@ public class AuthController {
                 String userId = jwtUtil.extractUserId(token);
                 User u = userRepository.findById(userId).orElse(null);
                 if (u != null) {
-                    return ResponseEntity.ok(u);
+                    return ResponseEntity.ok(UserDTO.fromUser(u));
                 }
             } catch (JwtException | IllegalArgumentException e) {
                 // falls through to 401 below
@@ -83,7 +84,7 @@ public class AuthController {
         User u = new User(UUID.randomUUID().toString(), email, passwordEncoder.encode(password), name);
         userRepository.save(u);
         String token = jwtUtil.generateToken(u.id, u.email);
-        return ResponseEntity.ok(Map.of("token", token, "user", u));
+        return ResponseEntity.ok(Map.of("token", token, "user", UserDTO.fromUser(u)));
     }
 
     @PostMapping("/recover")
