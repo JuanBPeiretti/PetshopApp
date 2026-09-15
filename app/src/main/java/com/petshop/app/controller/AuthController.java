@@ -9,6 +9,7 @@ import io.jsonwebtoken.JwtException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
@@ -23,6 +24,7 @@ public class AuthController {
     private final JwtUtil jwtUtil;
     private final UserRepository userRepository;
     private final ResetTokenRepository resetTokenRepository;
+    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     private static final Logger RESET_LOG = LoggerFactory.getLogger("resetTokenLogger");
 
     public AuthController(JwtUtil jwtUtil, UserRepository userRepository, ResetTokenRepository resetTokenRepository) {
@@ -33,11 +35,11 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody Map<String,String> body) {
-        String email = body.get("email");
+        String email = body.get("email") != null ? body.get("email").trim() : null;
         String password = body.get("password");
 
         User u = userRepository.findByEmail(email).orElse(null);
-        if (u != null && u.password.equals(password)) {
+        if (u != null && passwordEncoder.matches(password, u.password)) {
             String token = jwtUtil.generateToken(u.id, u.email);
             Map<String,Object> resp = new HashMap<>();
             resp.put("token",token);
@@ -78,7 +80,7 @@ public class AuthController {
             return ResponseEntity.status(409).body(Map.of("error","Usuario ya existe"));
         }
 
-        User u = new User(UUID.randomUUID().toString(), email, password, name);
+        User u = new User(UUID.randomUUID().toString(), email, passwordEncoder.encode(password), name);
         userRepository.save(u);
         String token = jwtUtil.generateToken(u.id, u.email);
         return ResponseEntity.ok(Map.of("token", token, "user", u));
@@ -126,7 +128,7 @@ public class AuthController {
             return ResponseEntity.badRequest().body(Map.of("error","Usuario no encontrado"));
         }
 
-        u.password = newPassword;
+        u.password = passwordEncoder.encode(newPassword);
         userRepository.save(u);
         resetTokenRepository.delete(rt);
         return ResponseEntity.ok(Map.of("ok", true));
