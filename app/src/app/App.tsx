@@ -266,6 +266,7 @@ function App() {
         <ProductDetailScreen
           product={selectedProduct}
           authToken={authToken}
+          isAdmin={currentUser?.role === "ADMIN"}
           onBack={handleProductDetailBack}
           onAddToCart={handleAddToCart}
         />

@@ -1,4 +1,7 @@
+import { useEffect, useState } from "react";
 import type { Product } from "../types";
+
+const PAGE_SIZE = 12;
 
 type Props = {
   products: Product[];
@@ -28,6 +31,16 @@ export function ProductsScreen({
   onAddToCart,
   onOpenProduct,
 }: Props) {
+  const [page, setPage] = useState(1);
+
+  useEffect(() => {
+    setPage(1);
+  }, [products, categoryFilter, sort, search]);
+
+  const totalPages = Math.max(1, Math.ceil(products.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const paginatedProducts = products.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
   return (
     <div className="page-shell">
       <section className="toolbar-card">
@@ -66,9 +79,11 @@ export function ProductsScreen({
 
       {loading ? (
         <div className="empty-state">Cargando productos...</div>
+      ) : products.length === 0 ? (
+        <div className="empty-state">No encontramos productos con esos filtros.</div>
       ) : (
         <div className="product-grid">
-          {products.map((product) => (
+          {paginatedProducts.map((product) => (
             <article key={product.id} className="product-card">
               <div className="product-image-wrap product-clickable" onClick={() => onOpenProduct(product.id)}>
                 <img
@@ -108,6 +123,20 @@ export function ProductsScreen({
           ))}
         </div>
       )}
+
+      {!loading && totalPages > 1 ? (
+        <div className="pagination-row">
+          <button className="secondary-btn" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={currentPage <= 1}>
+            ← Anterior
+          </button>
+          <span>
+            Página {currentPage} de {totalPages}
+          </span>
+          <button className="secondary-btn" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage >= totalPages}>
+            Siguiente →
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

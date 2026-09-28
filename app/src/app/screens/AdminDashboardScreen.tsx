@@ -208,6 +208,20 @@ export function AdminDashboardScreen({ authToken, categories, currentUserId }: P
 
   const orderStatuses = Array.from(new Set(orders.map((o) => o.estado)));
 
+  const ORDERS_PAGE_SIZE = 10;
+  const [orderPage, setOrderPage] = useState(1);
+
+  useEffect(() => {
+    setOrderPage(1);
+  }, [orderStatusFilter, orders.length]);
+
+  const orderTotalPages = Math.max(1, Math.ceil(filteredOrders.length / ORDERS_PAGE_SIZE));
+  const orderCurrentPage = Math.min(orderPage, orderTotalPages);
+  const paginatedOrders = filteredOrders.slice(
+    (orderCurrentPage - 1) * ORDERS_PAGE_SIZE,
+    orderCurrentPage * ORDERS_PAGE_SIZE,
+  );
+
   const loadVariants = async (productId: string) => {
     setVariantsLoading(true);
     try {
@@ -570,7 +584,7 @@ export function AdminDashboardScreen({ authToken, categories, currentUserId }: P
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredOrders.map((order) => (
+                  {paginatedOrders.map((order) => (
                     <tr key={order.id}>
                       <td>{order.id}</td>
                       <td className="mono">{order.userId}</td>
@@ -600,6 +614,24 @@ export function AdminDashboardScreen({ authToken, categories, currentUserId }: P
               </table>
             </div>
           )}
+
+          {orderTotalPages > 1 ? (
+            <div className="pagination-row">
+              <button className="secondary-btn" onClick={() => setOrderPage((p) => Math.max(1, p - 1))} disabled={orderCurrentPage <= 1}>
+                ← Anterior
+              </button>
+              <span>
+                Página {orderCurrentPage} de {orderTotalPages}
+              </span>
+              <button
+                className="secondary-btn"
+                onClick={() => setOrderPage((p) => Math.min(orderTotalPages, p + 1))}
+                disabled={orderCurrentPage >= orderTotalPages}
+              >
+                Siguiente →
+              </button>
+            </div>
+          ) : null}
         </section>
       ) : null}
 

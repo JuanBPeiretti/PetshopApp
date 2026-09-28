@@ -146,6 +146,13 @@ export async function submitReview(token: string, productId: string, rating: num
   });
 }
 
+export async function deleteReview(token: string, productId: string, reviewId: number): Promise<{ ok: boolean }> {
+  return request<{ ok: boolean }>(`/products/${productId}/reviews/${reviewId}`, {
+    method: "DELETE",
+    headers: { "X-Auth-Token": token },
+  });
+}
+
 export async function login(email: string, password: string): Promise<{ token: string; user: User }> {
   return request<{ token: string; user: User }>("/auth/login", {
     method: "POST",

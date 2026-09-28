@@ -16,10 +16,13 @@ import java.time.ZoneId;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/api/orders")
 public class OrderController {
+
+    private static final Set<String> VALID_STATUSES = Set.of("PENDIENTE", "COMPLETADA", "ENVIADA", "CANCELADA");
 
     private final OrderRepository orderRepository;
     private final ProductRepository productRepository;
@@ -103,8 +106,8 @@ public class OrderController {
         }
 
         String nuevoEstado = body.get("estado");
-        if (nuevoEstado == null || nuevoEstado.isBlank()) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Estado inválido"));
+        if (nuevoEstado == null || !VALID_STATUSES.contains(nuevoEstado)) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Estado inválido, debe ser uno de: " + VALID_STATUSES));
         }
 
         order.estado = nuevoEstado;

@@ -495,6 +495,16 @@ img {
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 }
 
+.pagination-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 24px;
+  color: #475569;
+  font-size: 0.9rem;
+}
+
 .product-card {
   display: flex;
   flex-direction: column;
@@ -1368,6 +1378,12 @@ img {
 }
 
 .review-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.review-card-footer {
   display: flex;
   justify-content: space-between;
   align-items: center;

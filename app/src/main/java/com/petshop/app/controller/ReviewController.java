@@ -6,6 +6,7 @@ import com.petshop.app.model.User;
 import com.petshop.app.repository.ProductRepository;
 import com.petshop.app.repository.ReviewRepository;
 import com.petshop.app.repository.UserRepository;
+import com.petshop.app.service.AdminGuard;
 import com.petshop.app.service.JwtUtil;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -22,13 +23,15 @@ public class ReviewController {
     private final ProductRepository productRepository;
     private final UserRepository userRepository;
     private final JwtUtil jwtUtil;
+    private final AdminGuard adminGuard;
 
     public ReviewController(ReviewRepository reviewRepository, ProductRepository productRepository,
-                             UserRepository userRepository, JwtUtil jwtUtil) {
+                             UserRepository userRepository, JwtUtil jwtUtil, AdminGuard adminGuard) {
         this.reviewRepository = reviewRepository;
         this.productRepository = productRepository;
         this.userRepository = userRepository;
         this.jwtUtil = jwtUtil;
+        this.adminGuard = adminGuard;
     }
 
     @GetMapping
@@ -63,9 +66,30 @@ public class ReviewController {
         String comment = body.get("comment") != null ? body.get("comment").toString() : "";
         String userId = jwtUtil.extractUserId(token);
 
+        if (reviewRepository.existsByProductIdAndUserId(productId, userId)) {
+            return ResponseEntity.status(409).body(Map.of("error", "Ya dejaste una reseña para este producto"));
+        }
+
         Review review = new Review(productId, userId, rating, comment, Instant.now());
         reviewRepository.save(review);
         return ResponseEntity.ok(toDto(review));
+    }
+
+    @DeleteMapping("/{reviewId}")
+    public ResponseEntity<?> delete(@PathVariable String productId,
+                                     @PathVariable Long reviewId,
+                                     @RequestHeader(value = "X-Auth-Token", required = false) String token) {
+        if (!adminGuard.isAdmin(token)) {
+            return ResponseEntity.status(403).body(Map.of("error", "Requiere permisos de administrador"));
+        }
+
+        Review review = reviewRepository.findById(reviewId).orElse(null);
+        if (review == null || !review.productId.equals(productId)) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Reseña no encontrada"));
+        }
+
+        reviewRepository.delete(review);
+        return ResponseEntity.ok(Map.of("ok", true));
     }
 
     private ReviewDTO toDto(Review review) {

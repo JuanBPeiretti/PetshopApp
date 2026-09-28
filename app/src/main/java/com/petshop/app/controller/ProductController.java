@@ -85,12 +85,13 @@ public class ProductController {
     }
 
     @GetMapping("/{id}")
-    public Product get(@PathVariable String id) {
+    public ResponseEntity<?> get(@PathVariable String id) {
         Product product = productRepository.findById(id).orElse(null);
-        if (product != null) {
-            product.hasVariants = !productVariantRepository.findByProductId(id).isEmpty();
+        if (product == null) {
+            return ResponseEntity.status(404).body(Map.of("error", "Producto no encontrado"));
         }
-        return product;
+        product.hasVariants = !productVariantRepository.findByProductId(id).isEmpty();
+        return ResponseEntity.ok(product);
     }
 
     @PostMapping

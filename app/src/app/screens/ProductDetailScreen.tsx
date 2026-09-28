@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import type { Product, ProductVariant, Review } from "../types";
-import { fetchProductReviews, fetchProductVariants, submitReview } from "../api";
+import { deleteReview, fetchProductReviews, fetchProductVariants, submitReview } from "../api";
 
 type Props = {
   product: Product | null;
   authToken: string | null;
+  isAdmin: boolean;
   onBack: () => void;
   onAddToCart: (product: Product, variant?: ProductVariant) => void;
 };
@@ -15,7 +16,7 @@ const formatMoney = (value: number) =>
 const variantLabel = (variant: ProductVariant) =>
   [variant.talle ? `Talle ${variant.talle}` : null, variant.color].filter(Boolean).join(" / ");
 
-export function ProductDetailScreen({ product, authToken, onBack, onAddToCart }: Props) {
+export function ProductDetailScreen({ product, authToken, isAdmin, onBack, onAddToCart }: Props) {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(false);
   const [rating, setRating] = useState(5);
@@ -78,6 +79,16 @@ export function ProductDetailScreen({ product, authToken, onBack, onAddToCart }:
       setReviewError(error instanceof Error ? error.message : "No se pudo enviar la reseña");
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleDeleteReview = async (reviewId: number) => {
+    if (!authToken) return;
+    try {
+      await deleteReview(authToken, product.id, reviewId);
+      setReviews((prev) => prev.filter((r) => r.id !== reviewId));
+    } catch (error) {
+      console.error("No se pudo eliminar la reseña", error);
     }
   };
 
@@ -232,7 +243,14 @@ export function ProductDetailScreen({ product, authToken, onBack, onAddToCart }:
                   <span>{"⭐".repeat(r.rating)}</span>
                 </div>
                 <p>{r.comment}</p>
-                <span className="review-date">{new Date(r.createdAt).toLocaleDateString("es-AR")}</span>
+                <div className="review-card-footer">
+                  <span className="review-date">{new Date(r.createdAt).toLocaleDateString("es-AR")}</span>
+                  {isAdmin ? (
+                    <button className="text-link" onClick={() => handleDeleteReview(r.id)}>
+                      Eliminar
+                    </button>
+                  ) : null}
+                </div>
               </div>
             ))}
           </div>
