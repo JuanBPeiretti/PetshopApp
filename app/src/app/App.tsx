@@ -164,6 +164,7 @@ function App() {
       setView("cart");
     } catch (error) {
       console.error("Error agregando al carrito", error);
+      alert(error instanceof Error ? error.message : "No se pudo agregar el producto al carrito.");
     }
   };
 
@@ -183,7 +184,7 @@ function App() {
       alert("Compra simulada completada.");
     } catch (error) {
       console.error("Error al finalizar la compra", error);
-      alert("No se pudo completar la compra.");
+      alert(error instanceof Error ? error.message : "No se pudo completar la compra.");
     }
   };
 
@@ -193,6 +194,7 @@ function App() {
       setCartItems(updated);
     } catch (error) {
       console.error("Error sumando cantidad", error);
+      alert(error instanceof Error ? error.message : "No se pudo sumar la cantidad.");
     }
   };
 

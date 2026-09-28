@@ -64,8 +64,8 @@ export function ProductDetailScreen({ product, onBack, onAddToCart }: Props) {
           </p>
 
           <div className="product-detail-actions">
-            <button className="primary-btn" onClick={() => onAddToCart(product)}>
-              Agregar al carrito
+            <button className="primary-btn" onClick={() => onAddToCart(product)} disabled={product.stock <= 0}>
+              {product.stock <= 0 ? "Sin stock" : "Agregar al carrito"}
             </button>
           </div>
 

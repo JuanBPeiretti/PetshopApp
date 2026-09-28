@@ -355,6 +355,13 @@ img {
   transform: translateY(-1px);
 }
 
+.primary-btn:disabled,
+.secondary-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
 .hero-stats {
   display: flex;
   gap: 20px;

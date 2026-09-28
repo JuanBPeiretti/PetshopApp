@@ -22,7 +22,8 @@ import java.util.Objects;
 @RequestMapping("/api/cart")
 public class CartController {
 
-    private static final String GUEST = "guest";
+    private static final String GUEST_PREFIX = "guest:";
+    private static final String GUEST_FALLBACK = "guest:unknown";
 
     private final InMemoryStore store;
     private final ProductRepository productRepository;
@@ -41,20 +42,24 @@ public class CartController {
         this.notificationService = notificationService;
     }
 
-    private String resolveToken(String token) {
-        if (token == null || token.isBlank() || !jwtUtil.isTokenValid(token)) {
-            return GUEST;
+    private String resolveToken(String token, String guestId) {
+        if (token != null && !token.isBlank() && jwtUtil.isTokenValid(token)) {
+            return jwtUtil.extractUserId(token);
         }
-        return jwtUtil.extractUserId(token);
+        if (guestId != null && !guestId.isBlank()) {
+            return GUEST_PREFIX + guestId;
+        }
+        return GUEST_FALLBACK;
     }
 
     private boolean isGuest(String userToken) {
-        return GUEST.equals(userToken);
+        return userToken.startsWith(GUEST_PREFIX);
     }
 
     @GetMapping
-    public ResponseEntity<?> getCart(@RequestHeader(value = "X-Auth-Token", required = false) String token) {
-        String userToken = resolveToken(token);
+    public ResponseEntity<?> getCart(@RequestHeader(value = "X-Auth-Token", required = false) String token,
+                                      @RequestHeader(value = "X-Guest-Id", required = false) String guestId) {
+        String userToken = resolveToken(token, guestId);
         List<CartItem> items = isGuest(userToken)
                 ? store.carts.getOrDefault(userToken, List.of())
                 : cartItemRepository.findByUserId(userToken);
@@ -62,8 +67,10 @@ public class CartController {
     }
 
     @PostMapping("/add")
-    public ResponseEntity<?> add(@RequestHeader(value = "X-Auth-Token", required = false) String token, @RequestBody CartItem item) {
-        String userToken = resolveToken(token);
+    public ResponseEntity<?> add(@RequestHeader(value = "X-Auth-Token", required = false) String token,
+                                  @RequestHeader(value = "X-Guest-Id", required = false) String guestId,
+                                  @RequestBody CartItem item) {
+        String userToken = resolveToken(token, guestId);
         if (item == null || item.productId == null || item.productId.isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("error", "Producto inválido"));
         }
@@ -82,9 +89,15 @@ public class CartController {
             List<CartItem> cart = store.carts.computeIfAbsent(userToken, k -> new ArrayList<>());
             for (CartItem existing : cart) {
                 if (existing.productId.equals(item.productId) && Objects.equals(existing.variant, item.variant)) {
+                    if (existing.quantity + item.quantity > product.stock) {
+                        return ResponseEntity.badRequest().body(Map.of("error", "Stock insuficiente. Disponible: " + product.stock));
+                    }
                     existing.quantity += item.quantity;
                     return ResponseEntity.ok(cart);
                 }
+            }
+            if (item.quantity > product.stock) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Stock insuficiente. Disponible: " + product.stock));
             }
             cart.add(item);
             return ResponseEntity.ok(cart);
@@ -93,12 +106,18 @@ public class CartController {
         List<CartItem> cart = cartItemRepository.findByUserId(userToken);
         for (CartItem existing : cart) {
             if (existing.productId.equals(item.productId) && Objects.equals(existing.variant, item.variant)) {
+                if (existing.quantity + item.quantity > product.stock) {
+                    return ResponseEntity.badRequest().body(Map.of("error", "Stock insuficiente. Disponible: " + product.stock));
+                }
                 existing.quantity += item.quantity;
                 cartItemRepository.save(existing);
                 return ResponseEntity.ok(cartItemRepository.findByUserId(userToken));
             }
         }
 
+        if (item.quantity > product.stock) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Stock insuficiente. Disponible: " + product.stock));
+        }
         item.userId = userToken;
         cartItemRepository.save(item);
         return ResponseEntity.ok(cartItemRepository.findByUserId(userToken));
@@ -106,24 +125,32 @@ public class CartController {
 
     @PutMapping("/items/{productId}/increment")
     public ResponseEntity<?> increment(@RequestHeader(value = "X-Auth-Token", required = false) String token,
+                                        @RequestHeader(value = "X-Guest-Id", required = false) String guestId,
                                         @PathVariable String productId) {
-        return adjustQuantity(token, productId, 1);
+        return adjustQuantity(token, guestId, productId, 1);
     }
 
     @PutMapping("/items/{productId}/decrement")
     public ResponseEntity<?> decrement(@RequestHeader(value = "X-Auth-Token", required = false) String token,
+                                        @RequestHeader(value = "X-Guest-Id", required = false) String guestId,
                                         @PathVariable String productId) {
-        return adjustQuantity(token, productId, -1);
+        return adjustQuantity(token, guestId, productId, -1);
     }
 
-    private ResponseEntity<?> adjustQuantity(String token, String productId, int delta) {
-        String userToken = resolveToken(token);
+    private ResponseEntity<?> adjustQuantity(String token, String guestId, String productId, int delta) {
+        String userToken = resolveToken(token, guestId);
 
         if (isGuest(userToken)) {
             List<CartItem> cart = store.carts.getOrDefault(userToken, new ArrayList<>());
             CartItem item = cart.stream().filter(i -> i.productId.equals(productId)).findFirst().orElse(null);
             if (item == null) {
                 return ResponseEntity.badRequest().body(Map.of("error", "El producto no está en el carrito"));
+            }
+            if (delta > 0) {
+                Product product = productRepository.findById(productId).orElse(null);
+                if (product == null || item.quantity + delta > product.stock) {
+                    return ResponseEntity.badRequest().body(Map.of("error", "Stock insuficiente"));
+                }
             }
             item.quantity += delta;
             if (item.quantity <= 0) {
@@ -139,6 +166,13 @@ public class CartController {
             return ResponseEntity.badRequest().body(Map.of("error", "El producto no está en el carrito"));
         }
 
+        if (delta > 0) {
+            Product product = productRepository.findById(productId).orElse(null);
+            if (product == null || item.quantity + delta > product.stock) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Stock insuficiente"));
+            }
+        }
+
         item.quantity += delta;
         if (item.quantity <= 0) {
             cartItemRepository.delete(item);
@@ -149,8 +183,10 @@ public class CartController {
     }
 
     @PostMapping("/remove")
-    public ResponseEntity<?> remove(@RequestHeader(value = "X-Auth-Token", required = false) String token, @RequestBody CartItem item) {
-        String userToken = resolveToken(token);
+    public ResponseEntity<?> remove(@RequestHeader(value = "X-Auth-Token", required = false) String token,
+                                     @RequestHeader(value = "X-Guest-Id", required = false) String guestId,
+                                     @RequestBody CartItem item) {
+        String userToken = resolveToken(token, guestId);
 
         if (isGuest(userToken)) {
             List<CartItem> list = store.carts.getOrDefault(userToken, new ArrayList<>());
@@ -168,17 +204,31 @@ public class CartController {
     }
 
     @PostMapping("/checkout")
-    public ResponseEntity<?> checkout(@RequestHeader(value = "X-Auth-Token", required = false) String token) {
-        String userToken = resolveToken(token);
+    public ResponseEntity<?> checkout(@RequestHeader(value = "X-Auth-Token", required = false) String token,
+                                       @RequestHeader(value = "X-Guest-Id", required = false) String guestId) {
+        String userToken = resolveToken(token, guestId);
 
-        List<CartItem> purchasedItems;
-        if (isGuest(userToken)) {
-            purchasedItems = store.carts.remove(userToken);
-            if (purchasedItems == null) {
-                purchasedItems = new ArrayList<>();
+        List<CartItem> purchasedItems = isGuest(userToken)
+                ? store.carts.getOrDefault(userToken, new ArrayList<>())
+                : cartItemRepository.findByUserId(userToken);
+
+        for (CartItem item : purchasedItems) {
+            Product product = productRepository.findById(item.productId).orElse(null);
+            if (product == null || product.stock < item.quantity) {
+                String name = product != null ? product.name : item.productId;
+                return ResponseEntity.badRequest().body(Map.of("error", "Stock insuficiente para " + name));
             }
+        }
+
+        for (CartItem item : purchasedItems) {
+            Product product = productRepository.findById(item.productId).orElse(null);
+            product.stock -= item.quantity;
+            productRepository.save(product);
+        }
+
+        if (isGuest(userToken)) {
+            store.carts.remove(userToken);
         } else {
-            purchasedItems = cartItemRepository.findByUserId(userToken);
             if (!purchasedItems.isEmpty()) {
                 List<Order.OrderItem> orderItems = purchasedItems.stream()
                         .map(i -> new Order.OrderItem(i.productId, i.quantity, i.price))

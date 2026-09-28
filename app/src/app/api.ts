@@ -3,6 +3,7 @@ import type { CartItem, Category, OrderRecord, OrderStats, Product, ReturnRecord
 const API_BASE_URL = "http://localhost:8080/api";
 export const AUTH_TOKEN_KEY = "petshop_auth_token";
 export const AUTH_USER_KEY = "petshop_auth_user";
+export const GUEST_ID_KEY = "petshop_guest_id";
 
 async function request<T>(input: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers ?? {});
@@ -17,10 +18,30 @@ async function request<T>(input: string, init?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(text || "Request failed");
+    let message = text || "Request failed";
+    try {
+      const parsed = JSON.parse(text) as { error?: string };
+      if (parsed.error) message = parsed.error;
+    } catch {
+      // not JSON, keep raw text
+    }
+    throw new Error(message);
   }
 
   return (await response.json()) as T;
+}
+
+export function getGuestId(): string {
+  try {
+    let id = localStorage.getItem(GUEST_ID_KEY);
+    if (!id) {
+      id = crypto.randomUUID();
+      localStorage.setItem(GUEST_ID_KEY, id);
+    }
+    return id;
+  } catch {
+    return "unknown";
+  }
 }
 
 export function getAuthToken(): string | null {
@@ -70,58 +91,52 @@ export async function fetchCurrentUser(token: string): Promise<User> {
   });
 }
 
-export async function fetchCart(token?: string | null): Promise<CartItem[]> {
-  const headers: Record<string, string> = {};
+function cartHeaders(token?: string | null): Record<string, string> {
+  const headers: Record<string, string> = { "X-Guest-Id": getGuestId() };
   if (token) headers["X-Auth-Token"] = token;
+  return headers;
+}
+
+export async function fetchCart(token?: string | null): Promise<CartItem[]> {
   return request<CartItem[]>("/cart", {
-    headers,
+    headers: cartHeaders(token),
   });
 }
 
 export async function addToCart(token: string | null, item: CartItem): Promise<CartItem[]> {
-  const headers: Record<string, string> = {};
-  if (token) headers["X-Auth-Token"] = token;
   return request<CartItem[]>("/cart/add", {
     method: "POST",
-    headers,
+    headers: cartHeaders(token),
     body: JSON.stringify(item),
   });
 }
 
 export async function removeFromCart(token: string | null, item: CartItem): Promise<CartItem[]> {
-  const headers: Record<string, string> = {};
-  if (token) headers["X-Auth-Token"] = token;
   return request<CartItem[]>("/cart/remove", {
     method: "POST",
-    headers,
+    headers: cartHeaders(token),
     body: JSON.stringify(item),
   });
 }
 
 export async function incrementCartItem(token: string | null, productId: string): Promise<CartItem[]> {
-  const headers: Record<string, string> = {};
-  if (token) headers["X-Auth-Token"] = token;
   return request<CartItem[]>(`/cart/items/${productId}/increment`, {
     method: "PUT",
-    headers,
+    headers: cartHeaders(token),
   });
 }
 
 export async function decrementCartItem(token: string | null, productId: string): Promise<CartItem[]> {
-  const headers: Record<string, string> = {};
-  if (token) headers["X-Auth-Token"] = token;
   return request<CartItem[]>(`/cart/items/${productId}/decrement`, {
     method: "PUT",
-    headers,
+    headers: cartHeaders(token),
   });
 }
 
 export async function checkoutCart(token?: string | null): Promise<{ ok: boolean; items: CartItem[] }> {
-  const headers: Record<string, string> = {};
-  if (token) headers["X-Auth-Token"] = token;
   return request<{ ok: boolean; items: CartItem[] }>("/cart/checkout", {
     method: "POST",
-    headers,
+    headers: cartHeaders(token),
   });
 }
 

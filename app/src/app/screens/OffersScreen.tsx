@@ -53,8 +53,8 @@ export function OffersScreen({ products, onAddToCart, onOpenProduct }: Props) {
                   <strong>{formatMoney(product.price)}</strong>
                   {product.oldPrice ? <span>{formatMoney(product.oldPrice)}</span> : null}
                 </div>
-                <button className="primary-btn block" onClick={() => onAddToCart(product)}>
-                  Agregar al carrito
+                <button className="primary-btn block" onClick={() => onAddToCart(product)} disabled={product.stock <= 0}>
+                  {product.stock <= 0 ? "Sin stock" : "Agregar al carrito"}
                 </button>
               </div>
             </article>

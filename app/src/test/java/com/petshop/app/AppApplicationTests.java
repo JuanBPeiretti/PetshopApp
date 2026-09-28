@@ -97,7 +97,7 @@ class AppApplicationTests {
 
         String token = jwtUtil.generateToken("user-1", "user1@example.com", "CUSTOMER");
 
-        ResponseEntity<?> added = cartController.add(token, new CartItem("p-cart-1", "Producto carrito", "alimentos", 1, 950.0));
+        ResponseEntity<?> added = cartController.add(token, null, new CartItem("p-cart-1", "Producto carrito", "alimentos", 1, 950.0));
         assertThat(added.getStatusCode().is2xxSuccessful()).isTrue();
 
         List<CartItem> items = (List<CartItem>) added.getBody();
@@ -108,18 +108,19 @@ class AppApplicationTests {
         assertThat(persistedCart).hasSize(1);
         assertThat(store.carts).doesNotContainKey("user-1");
 
-        ResponseEntity<?> addedAgain = cartController.add(token, new CartItem("p-cart-1", "Producto carrito", "alimentos", 1, 950.0));
+        ResponseEntity<?> addedAgain = cartController.add(token, null, new CartItem("p-cart-1", "Producto carrito", "alimentos", 1, 950.0));
         List<CartItem> itemsAfterMerge = (List<CartItem>) addedAgain.getBody();
         assertThat(itemsAfterMerge).hasSize(1);
         assertThat(itemsAfterMerge.get(0).quantity).isEqualTo(2);
         assertThat(persistedCart).hasSize(1);
 
-        ResponseEntity<?> checkout = cartController.checkout(token);
+        ResponseEntity<?> checkout = cartController.checkout(token, null);
         assertThat(checkout.getStatusCode().is2xxSuccessful()).isTrue();
 
         Map<?, ?> body = (Map<?, ?>) checkout.getBody();
         assertThat(body.get("ok")).isEqualTo(true);
         assertThat(persistedCart).isEmpty();
+        assertThat(product.stock).isEqualTo(13);
         verify(notificationService).notify("user1@example.com", "Tu compra de 1 producto(s) se realizó con éxito.");
 
         assertThat(savedOrders).hasSize(1);
@@ -150,19 +151,19 @@ class AppApplicationTests {
         when(productRepository.findById("p-cart-3")).thenReturn(Optional.of(product));
 
         String token = jwtUtil.generateToken("user-1", "user1@example.com", "CUSTOMER");
-        cartController.add(token, new CartItem("p-cart-3", "Producto stepper", "alimentos", 1, 300.0));
+        cartController.add(token, null, new CartItem("p-cart-3", "Producto stepper", "alimentos", 1, 300.0));
 
-        ResponseEntity<?> incremented = cartController.increment(token, "p-cart-3");
+        ResponseEntity<?> incremented = cartController.increment(token, null, "p-cart-3");
         List<CartItem> afterIncrement = (List<CartItem>) incremented.getBody();
         assertThat(afterIncrement).hasSize(1);
         assertThat(afterIncrement.get(0).quantity).isEqualTo(2);
 
-        ResponseEntity<?> decremented = cartController.decrement(token, "p-cart-3");
+        ResponseEntity<?> decremented = cartController.decrement(token, null, "p-cart-3");
         List<CartItem> afterDecrement = (List<CartItem>) decremented.getBody();
         assertThat(afterDecrement).hasSize(1);
         assertThat(afterDecrement.get(0).quantity).isEqualTo(1);
 
-        ResponseEntity<?> decrementedAgain = cartController.decrement(token, "p-cart-3");
+        ResponseEntity<?> decrementedAgain = cartController.decrement(token, null, "p-cart-3");
         List<CartItem> afterSecondDecrement = (List<CartItem>) decrementedAgain.getBody();
         assertThat(afterSecondDecrement).isEmpty();
         assertThat(persistedCart).isEmpty();
@@ -184,16 +185,65 @@ class AppApplicationTests {
         );
         when(productRepository.findById("p-cart-2")).thenReturn(Optional.of(product));
 
-        cartController.add(null, new CartItem("p-cart-2", "Producto invitado", "alimentos", 1, 500.0));
-        cartController.add("not-a-real-jwt", new CartItem("p-cart-2", "Producto invitado", "alimentos", 1, 500.0));
+        cartController.add(null, "device-1", new CartItem("p-cart-2", "Producto invitado", "alimentos", 1, 500.0));
+        cartController.add("not-a-real-jwt", "device-1", new CartItem("p-cart-2", "Producto invitado", "alimentos", 1, 500.0));
 
-        assertThat(store.carts).containsKey("guest");
-        assertThat(store.carts.get("guest")).hasSize(1);
-        assertThat(store.carts.get("guest").get(0).quantity).isEqualTo(2);
+        assertThat(store.carts).containsKey("guest:device-1");
+        assertThat(store.carts.get("guest:device-1")).hasSize(1);
+        assertThat(store.carts.get("guest:device-1").get(0).quantity).isEqualTo(2);
         assertThat(persistedCart).isEmpty();
 
-        cartController.checkout(null);
+        cartController.checkout(null, "device-1");
         verifyNoInteractions(notificationService);
         verifyNoInteractions(orderRepository);
+    }
+
+    @Test
+    void differentGuestDevicesGetIsolatedCarts() {
+        Product product = new Product(
+            "p-cart-4",
+            "Producto aislado",
+            "Marca carrito",
+            200.0,
+            null,
+            4.1,
+            "/images/cart-test-4.jpg",
+            "Nuevo",
+            "alimentos",
+            50
+        );
+        when(productRepository.findById("p-cart-4")).thenReturn(Optional.of(product));
+
+        cartController.add(null, "device-A", new CartItem("p-cart-4", "Producto aislado", "alimentos", 1, 200.0));
+        cartController.add(null, "device-B", new CartItem("p-cart-4", "Producto aislado", "alimentos", 3, 200.0));
+
+        ResponseEntity<?> cartA = cartController.getCart(null, "device-A");
+        ResponseEntity<?> cartB = cartController.getCart(null, "device-B");
+
+        assertThat(((List<CartItem>) cartA.getBody()).get(0).quantity).isEqualTo(1);
+        assertThat(((List<CartItem>) cartB.getBody()).get(0).quantity).isEqualTo(3);
+    }
+
+    @Test
+    void addRejectsQuantityAboveAvailableStock() {
+        Product product = new Product(
+            "p-cart-5",
+            "Producto limitado",
+            "Marca carrito",
+            100.0,
+            null,
+            4.0,
+            "/images/cart-test-5.jpg",
+            "Nuevo",
+            "alimentos",
+            3
+        );
+        when(productRepository.findById("p-cart-5")).thenReturn(Optional.of(product));
+
+        String token = jwtUtil.generateToken("user-1", "user1@example.com", "CUSTOMER");
+        ResponseEntity<?> response = cartController.add(token, null, new CartItem("p-cart-5", "Producto limitado", "alimentos", 5, 100.0));
+
+        assertThat(response.getStatusCode().is4xxClientError()).isTrue();
+        assertThat(persistedCart).isEmpty();
     }
 }
