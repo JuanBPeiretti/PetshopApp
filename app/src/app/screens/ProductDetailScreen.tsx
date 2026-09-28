@@ -1,16 +1,19 @@
 import { useEffect, useState } from "react";
-import type { Product, Review } from "../types";
-import { fetchProductReviews, submitReview } from "../api";
+import type { Product, ProductVariant, Review } from "../types";
+import { fetchProductReviews, fetchProductVariants, submitReview } from "../api";
 
 type Props = {
   product: Product | null;
   authToken: string | null;
   onBack: () => void;
-  onAddToCart: (product: Product) => void;
+  onAddToCart: (product: Product, variant?: ProductVariant) => void;
 };
 
 const formatMoney = (value: number) =>
   new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(value);
+
+const variantLabel = (variant: ProductVariant) =>
+  [variant.talle ? `Talle ${variant.talle}` : null, variant.color].filter(Boolean).join(" / ");
 
 export function ProductDetailScreen({ product, authToken, onBack, onAddToCart }: Props) {
   const [reviews, setReviews] = useState<Review[]>([]);
@@ -20,6 +23,10 @@ export function ProductDetailScreen({ product, authToken, onBack, onAddToCart }:
   const [submitting, setSubmitting] = useState(false);
   const [reviewError, setReviewError] = useState<string | null>(null);
 
+  const [variants, setVariants] = useState<ProductVariant[]>([]);
+  const [variantsLoading, setVariantsLoading] = useState(false);
+  const [selectedVariantId, setSelectedVariantId] = useState<number | null>(null);
+
   useEffect(() => {
     if (!product) return;
     setReviewsLoading(true);
@@ -28,6 +35,19 @@ export function ProductDetailScreen({ product, authToken, onBack, onAddToCart }:
       .catch((error) => console.error("No se pudieron cargar las reseñas", error))
       .finally(() => setReviewsLoading(false));
   }, [product?.id]);
+
+  useEffect(() => {
+    setSelectedVariantId(null);
+    if (!product || !product.hasVariants) {
+      setVariants([]);
+      return;
+    }
+    setVariantsLoading(true);
+    fetchProductVariants(product.id)
+      .then(setVariants)
+      .catch((error) => console.error("No se pudieron cargar las variantes", error))
+      .finally(() => setVariantsLoading(false));
+  }, [product?.id, product?.hasVariants]);
 
   if (!product) {
     return (
@@ -106,9 +126,49 @@ export function ProductDetailScreen({ product, authToken, onBack, onAddToCart }:
             diario, entretenimiento o una rutina de cuidado más completa.
           </p>
 
+          {product.hasVariants ? (
+            <div className="variant-picker">
+              <span>Elegí una opción</span>
+              {variantsLoading ? (
+                <div className="empty-state">Cargando opciones...</div>
+              ) : variants.length === 0 ? (
+                <div className="empty-state">No hay opciones disponibles para este producto.</div>
+              ) : (
+                <div className="variant-chip-row">
+                  {variants.map((variant) => (
+                    <button
+                      key={variant.id}
+                      type="button"
+                      className={variant.id === selectedVariantId ? "variant-chip active" : "variant-chip"}
+                      onClick={() => setSelectedVariantId(variant.id)}
+                      disabled={variant.stock <= 0}
+                    >
+                      {variantLabel(variant)}
+                      <small>{variant.stock <= 0 ? "Sin stock" : `${variant.stock} disponibles`}</small>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : null}
+
           <div className="product-detail-actions">
-            <button className="primary-btn" onClick={() => onAddToCart(product)} disabled={product.stock <= 0}>
-              {product.stock <= 0 ? "Sin stock" : "Agregar al carrito"}
+            <button
+              className="primary-btn"
+              onClick={() => {
+                const selectedVariant = variants.find((v) => v.id === selectedVariantId);
+                onAddToCart(product, selectedVariant);
+              }}
+              disabled={
+                product.stock <= 0 ||
+                (product.hasVariants && (variants.length === 0 || selectedVariantId == null))
+              }
+            >
+              {product.stock <= 0
+                ? "Sin stock"
+                : product.hasVariants && selectedVariantId == null
+                  ? "Elegí una opción"
+                  : "Agregar al carrito"}
             </button>
           </div>
 

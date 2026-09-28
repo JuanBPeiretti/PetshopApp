@@ -17,12 +17,22 @@ export type Product = {
   stock: number;
   precioPromocional?: number | null;
   tipoPromocion?: string | null;
+  hasVariants?: boolean;
+};
+
+export type ProductVariant = {
+  id: number;
+  productId: string;
+  talle?: string | null;
+  color?: string | null;
+  stock: number;
 };
 
 export type CartItem = {
   productId: string;
   name: string;
   variant: string;
+  variantId?: number | null;
   quantity: number;
   price: number;
 };
@@ -39,6 +49,7 @@ export type OrderItem = {
   productId: string;
   quantity: number;
   price: number;
+  variant?: string | null;
 };
 
 export type OrderRecord = {

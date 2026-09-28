@@ -1,18 +1,22 @@
 import { useEffect, useState } from "react";
-import type { Category, OrderRecord, OrderStats, Product, ReturnRecord } from "../types";
+import type { Category, OrderRecord, OrderStats, Product, ProductVariant, ReturnRecord } from "../types";
 import {
   createCategory,
   createProduct,
+  createProductVariant,
   deleteCategory,
   deleteProduct,
+  deleteProductVariant,
   fetchAllOrders,
   fetchAllReturns,
   fetchCategories,
   fetchOrderStats,
   fetchProducts,
+  fetchProductVariants,
   updateCategory,
   updateOrderStatus,
   updateProduct,
+  updateProductVariant,
   updateReturnStatus,
   uploadImage,
 } from "../api";
@@ -28,6 +32,8 @@ const EMPTY_CATEGORY_FORM = { id: "", name: "", color: "#f97316" };
 
 const formatMoney = (value: number) =>
   new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(value);
+
+const EMPTY_VARIANT_FORM = { talle: "", color: "", stock: "" };
 
 const EMPTY_PRODUCT_FORM = {
   id: "",
@@ -60,6 +66,12 @@ export function AdminDashboardScreen({ authToken, categories }: Props) {
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [productError, setProductError] = useState<string | null>(null);
   const [imageUploading, setImageUploading] = useState(false);
+
+  const [variantList, setVariantList] = useState<ProductVariant[]>([]);
+  const [variantsLoading, setVariantsLoading] = useState(false);
+  const [variantForm, setVariantForm] = useState(EMPTY_VARIANT_FORM);
+  const [editingVariantId, setEditingVariantId] = useState<number | null>(null);
+  const [variantError, setVariantError] = useState<string | null>(null);
 
   const [returns, setReturns] = useState<ReturnRecord[]>([]);
   const [returnsLoading, setReturnsLoading] = useState(false);
@@ -156,6 +168,17 @@ export function AdminDashboardScreen({ authToken, categories }: Props) {
 
   const orderStatuses = Array.from(new Set(orders.map((o) => o.estado)));
 
+  const loadVariants = async (productId: string) => {
+    setVariantsLoading(true);
+    try {
+      setVariantList(await fetchProductVariants(productId));
+    } catch (error) {
+      console.error("No se pudieron cargar las variantes", error);
+    } finally {
+      setVariantsLoading(false);
+    }
+  };
+
   const startEditProduct = (product: Product) => {
     setEditingProductId(product.id);
     setProductForm({
@@ -173,12 +196,77 @@ export function AdminDashboardScreen({ authToken, categories }: Props) {
       tipoPromocion: product.tipoPromocion || "",
     });
     setProductError(null);
+    resetVariantForm();
+    void loadVariants(product.id);
   };
 
   const resetProductForm = () => {
     setEditingProductId(null);
     setProductForm(EMPTY_PRODUCT_FORM);
     setProductError(null);
+    setVariantList([]);
+    resetVariantForm();
+  };
+
+  const resetVariantForm = () => {
+    setEditingVariantId(null);
+    setVariantForm(EMPTY_VARIANT_FORM);
+    setVariantError(null);
+  };
+
+  const startEditVariant = (variant: ProductVariant) => {
+    setEditingVariantId(variant.id);
+    setVariantForm({
+      talle: variant.talle || "",
+      color: variant.color || "",
+      stock: String(variant.stock),
+    });
+    setVariantError(null);
+  };
+
+  const handleVariantSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingProductId) return;
+    setVariantError(null);
+
+    if (!variantForm.talle.trim() && !variantForm.color.trim()) {
+      setVariantError("Indicá al menos talle o color.");
+      return;
+    }
+
+    const payload: Partial<ProductVariant> = {
+      talle: variantForm.talle.trim() || null,
+      color: variantForm.color.trim() || null,
+      stock: variantForm.stock ? Number(variantForm.stock) : 0,
+    };
+
+    try {
+      if (editingVariantId) {
+        await updateProductVariant(authToken, editingProductId, editingVariantId, payload);
+      } else {
+        await createProductVariant(authToken, editingProductId, payload);
+      }
+      resetVariantForm();
+      await loadVariants(editingProductId);
+      await loadProducts();
+    } catch (error) {
+      setVariantError(error instanceof Error ? error.message : "No se pudo guardar la variante");
+    }
+  };
+
+  const handleDeleteVariant = async (variant: ProductVariant) => {
+    if (!editingProductId) return;
+    setVariantError(null);
+    try {
+      await deleteProductVariant(authToken, editingProductId, variant.id);
+      await loadVariants(editingProductId);
+      await loadProducts();
+      if (editingVariantId === variant.id) {
+        resetVariantForm();
+      }
+    } catch (error) {
+      setVariantError(error instanceof Error ? error.message : "No se pudo eliminar la variante");
+    }
   };
 
   const handleProductSubmit = async (e: React.FormEvent) => {
@@ -545,6 +633,82 @@ export function AdminDashboardScreen({ authToken, categories }: Props) {
               ) : null}
             </div>
           </form>
+
+          {editingProductId ? (
+            <section className="admin-subsection">
+              <h3>Variantes de "{productForm.name}"</h3>
+              <p className="admin-hint">
+                Si este producto tiene talle y/o color, cada opción maneja su propio stock. El stock total del
+                producto se calcula automáticamente sumando el de todas sus variantes.
+              </p>
+
+              <form className="admin-form-grid" onSubmit={handleVariantSubmit}>
+                <label>
+                  <span>Talle</span>
+                  <input value={variantForm.talle} onChange={(e) => setVariantForm({ ...variantForm, talle: e.target.value })} placeholder="M, 42..." />
+                </label>
+                <label>
+                  <span>Color</span>
+                  <input value={variantForm.color} onChange={(e) => setVariantForm({ ...variantForm, color: e.target.value })} placeholder="Negro, Rojo..." />
+                </label>
+                <label>
+                  <span>Stock</span>
+                  <input type="number" value={variantForm.stock} onChange={(e) => setVariantForm({ ...variantForm, stock: e.target.value })} />
+                </label>
+
+                {variantError ? <div className="error-box admin-form-wide">{variantError}</div> : null}
+
+                <div className="admin-form-actions admin-form-wide">
+                  <button className="primary-btn" type="submit">
+                    {editingVariantId ? "Guardar variante" : "Agregar variante"}
+                  </button>
+                  {editingVariantId ? (
+                    <button className="secondary-btn" type="button" onClick={resetVariantForm}>
+                      Cancelar
+                    </button>
+                  ) : null}
+                </div>
+              </form>
+
+              {variantsLoading ? (
+                <div className="empty-state">Cargando variantes...</div>
+              ) : variantList.length === 0 ? (
+                <div className="empty-state">Este producto todavía no tiene variantes.</div>
+              ) : (
+                <div className="admin-table-wrap">
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th>Talle</th>
+                        <th>Color</th>
+                        <th>Stock</th>
+                        <th>Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {variantList.map((variant) => (
+                        <tr key={variant.id}>
+                          <td>{variant.talle || "—"}</td>
+                          <td>{variant.color || "—"}</td>
+                          <td>{variant.stock}</td>
+                          <td>
+                            <div className="admin-row-actions">
+                              <button className="secondary-btn" onClick={() => startEditVariant(variant)}>
+                                Editar
+                              </button>
+                              <button className="secondary-btn danger" onClick={() => handleDeleteVariant(variant)}>
+                                Eliminar
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+          ) : null}
 
           {productsLoading ? (
             <div className="empty-state">Cargando productos...</div>

@@ -28,7 +28,7 @@ import {
   removeFromCart,
   UNAUTHORIZED_EVENT,
 } from "./api";
-import type { CartItem, CheckoutResult, Category, Product, ShippingInfo, User, View } from "./types";
+import type { CartItem, CheckoutResult, Category, Product, ProductVariant, ShippingInfo, User, View } from "./types";
 
 function App() {
   const [view, setView] = useState<View>("home");
@@ -172,12 +172,20 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleAddToCart = async (product: Product) => {
+  const handleAddToCart = async (product: Product, variant?: ProductVariant) => {
+    if (product.hasVariants && !variant) {
+      openProduct(product.id);
+      return;
+    }
     try {
+      const variantLabel = variant
+        ? [variant.talle ? `Talle ${variant.talle}` : null, variant.color].filter(Boolean).join(" / ")
+        : product.categoryId || product.brand;
       const nextItem: CartItem = {
         productId: product.id,
         name: product.name,
-        variant: product.categoryId || product.brand,
+        variant: variantLabel,
+        variantId: variant?.id ?? null,
         quantity: 1,
         price: product.price,
       };
@@ -213,7 +221,7 @@ function App() {
 
   const handleIncrementCartItem = async (item: CartItem) => {
     try {
-      const updated = await incrementCartItem(authToken, item.productId);
+      const updated = await incrementCartItem(authToken, item.productId, item.variantId);
       setCartItems(updated);
     } catch (error) {
       console.error("Error sumando cantidad", error);
@@ -223,7 +231,7 @@ function App() {
 
   const handleDecrementCartItem = async (item: CartItem) => {
     try {
-      const updated = await decrementCartItem(authToken, item.productId);
+      const updated = await decrementCartItem(authToken, item.productId, item.variantId);
       setCartItems(updated);
     } catch (error) {
       console.error("Error restando cantidad", error);
@@ -334,6 +342,7 @@ function App() {
         currentUser={currentUser}
         onNavigate={navigateTo}
         onAddToCart={handleAddToCart}
+        onOpenProduct={openProduct}
       />
     );
   };

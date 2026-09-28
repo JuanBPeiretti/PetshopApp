@@ -3,9 +3,11 @@ package com.petshop.app.controller;
 import com.petshop.app.model.CartItem;
 import com.petshop.app.model.Order;
 import com.petshop.app.model.Product;
+import com.petshop.app.model.ProductVariant;
 import com.petshop.app.repository.CartItemRepository;
 import com.petshop.app.repository.OrderRepository;
 import com.petshop.app.repository.ProductRepository;
+import com.petshop.app.repository.ProductVariantRepository;
 import com.petshop.app.service.InMemoryStore;
 import com.petshop.app.service.JwtUtil;
 import com.petshop.app.service.NotificationService;
@@ -28,19 +30,41 @@ public class CartController {
 
     private final InMemoryStore store;
     private final ProductRepository productRepository;
+    private final ProductVariantRepository variantRepository;
     private final CartItemRepository cartItemRepository;
     private final OrderRepository orderRepository;
     private final JwtUtil jwtUtil;
     private final NotificationService notificationService;
 
     public CartController(InMemoryStore store, ProductRepository productRepository, CartItemRepository cartItemRepository,
-                           OrderRepository orderRepository, JwtUtil jwtUtil, NotificationService notificationService) {
+                           OrderRepository orderRepository, JwtUtil jwtUtil, NotificationService notificationService,
+                           ProductVariantRepository variantRepository) {
         this.store = store;
         this.productRepository = productRepository;
         this.cartItemRepository = cartItemRepository;
         this.orderRepository = orderRepository;
         this.jwtUtil = jwtUtil;
         this.notificationService = notificationService;
+        this.variantRepository = variantRepository;
+    }
+
+    private int availableStock(Product product, Long variantId) {
+        if (variantId == null) {
+            return product.stock;
+        }
+        ProductVariant variant = variantRepository.findById(variantId).orElse(null);
+        return variant != null ? variant.stock : 0;
+    }
+
+    private String variantLabel(ProductVariant variant) {
+        List<String> parts = new ArrayList<>();
+        if (variant.talle != null && !variant.talle.isBlank()) {
+            parts.add("Talle " + variant.talle);
+        }
+        if (variant.color != null && !variant.color.isBlank()) {
+            parts.add(variant.color);
+        }
+        return String.join(" / ", parts);
     }
 
     private String resolveToken(String token, String guestId) {
@@ -81,24 +105,38 @@ public class CartController {
             return ResponseEntity.badRequest().body(Map.of("error", "Producto no encontrado"));
         }
 
+        int stockAvailable = product.stock;
+        if (item.variantId != null) {
+            ProductVariant variant = variantRepository.findById(item.variantId).orElse(null);
+            if (variant == null || !variant.productId.equals(item.productId)) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Variante no encontrada"));
+            }
+            stockAvailable = variant.stock;
+            if (item.variant == null || item.variant.isBlank()) {
+                item.variant = variantLabel(variant);
+            }
+        }
+
         item.name = item.name == null || item.name.isBlank() ? product.name : item.name;
         item.variant = item.variant == null || item.variant.isBlank() ? product.categoryId : item.variant;
         item.price = product.price;
         item.quantity = Math.max(1, item.quantity);
 
+        final int finalStockAvailable = stockAvailable;
+
         if (isGuest(userToken)) {
             List<CartItem> cart = store.carts.computeIfAbsent(userToken, k -> new ArrayList<>());
             for (CartItem existing : cart) {
-                if (existing.productId.equals(item.productId) && Objects.equals(existing.variant, item.variant)) {
-                    if (existing.quantity + item.quantity > product.stock) {
-                        return ResponseEntity.badRequest().body(Map.of("error", "Stock insuficiente. Disponible: " + product.stock));
+                if (existing.productId.equals(item.productId) && Objects.equals(existing.variantId, item.variantId)) {
+                    if (existing.quantity + item.quantity > finalStockAvailable) {
+                        return ResponseEntity.badRequest().body(Map.of("error", "Stock insuficiente. Disponible: " + finalStockAvailable));
                     }
                     existing.quantity += item.quantity;
                     return ResponseEntity.ok(cart);
                 }
             }
-            if (item.quantity > product.stock) {
-                return ResponseEntity.badRequest().body(Map.of("error", "Stock insuficiente. Disponible: " + product.stock));
+            if (item.quantity > finalStockAvailable) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Stock insuficiente. Disponible: " + finalStockAvailable));
             }
             cart.add(item);
             return ResponseEntity.ok(cart);
@@ -106,9 +144,9 @@ public class CartController {
 
         List<CartItem> cart = cartItemRepository.findByUserId(userToken);
         for (CartItem existing : cart) {
-            if (existing.productId.equals(item.productId) && Objects.equals(existing.variant, item.variant)) {
-                if (existing.quantity + item.quantity > product.stock) {
-                    return ResponseEntity.badRequest().body(Map.of("error", "Stock insuficiente. Disponible: " + product.stock));
+            if (existing.productId.equals(item.productId) && Objects.equals(existing.variantId, item.variantId)) {
+                if (existing.quantity + item.quantity > finalStockAvailable) {
+                    return ResponseEntity.badRequest().body(Map.of("error", "Stock insuficiente. Disponible: " + finalStockAvailable));
                 }
                 existing.quantity += item.quantity;
                 cartItemRepository.save(existing);
@@ -116,8 +154,8 @@ public class CartController {
             }
         }
 
-        if (item.quantity > product.stock) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Stock insuficiente. Disponible: " + product.stock));
+        if (item.quantity > finalStockAvailable) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Stock insuficiente. Disponible: " + finalStockAvailable));
         }
         item.userId = userToken;
         cartItemRepository.save(item);
@@ -127,29 +165,33 @@ public class CartController {
     @PutMapping("/items/{productId}/increment")
     public ResponseEntity<?> increment(@RequestHeader(value = "X-Auth-Token", required = false) String token,
                                         @RequestHeader(value = "X-Guest-Id", required = false) String guestId,
-                                        @PathVariable String productId) {
-        return adjustQuantity(token, guestId, productId, 1);
+                                        @PathVariable String productId,
+                                        @RequestParam(required = false) Long variantId) {
+        return adjustQuantity(token, guestId, productId, variantId, 1);
     }
 
     @PutMapping("/items/{productId}/decrement")
     public ResponseEntity<?> decrement(@RequestHeader(value = "X-Auth-Token", required = false) String token,
                                         @RequestHeader(value = "X-Guest-Id", required = false) String guestId,
-                                        @PathVariable String productId) {
-        return adjustQuantity(token, guestId, productId, -1);
+                                        @PathVariable String productId,
+                                        @RequestParam(required = false) Long variantId) {
+        return adjustQuantity(token, guestId, productId, variantId, -1);
     }
 
-    private ResponseEntity<?> adjustQuantity(String token, String guestId, String productId, int delta) {
+    private ResponseEntity<?> adjustQuantity(String token, String guestId, String productId, Long variantId, int delta) {
         String userToken = resolveToken(token, guestId);
 
         if (isGuest(userToken)) {
             List<CartItem> cart = store.carts.getOrDefault(userToken, new ArrayList<>());
-            CartItem item = cart.stream().filter(i -> i.productId.equals(productId)).findFirst().orElse(null);
+            CartItem item = cart.stream()
+                    .filter(i -> i.productId.equals(productId) && Objects.equals(i.variantId, variantId))
+                    .findFirst().orElse(null);
             if (item == null) {
                 return ResponseEntity.badRequest().body(Map.of("error", "El producto no está en el carrito"));
             }
             if (delta > 0) {
                 Product product = productRepository.findById(productId).orElse(null);
-                if (product == null || item.quantity + delta > product.stock) {
+                if (product == null || item.quantity + delta > availableStock(product, variantId)) {
                     return ResponseEntity.badRequest().body(Map.of("error", "Stock insuficiente"));
                 }
             }
@@ -162,14 +204,16 @@ public class CartController {
         }
 
         List<CartItem> cart = cartItemRepository.findByUserId(userToken);
-        CartItem item = cart.stream().filter(i -> i.productId.equals(productId)).findFirst().orElse(null);
+        CartItem item = cart.stream()
+                .filter(i -> i.productId.equals(productId) && Objects.equals(i.variantId, variantId))
+                .findFirst().orElse(null);
         if (item == null) {
             return ResponseEntity.badRequest().body(Map.of("error", "El producto no está en el carrito"));
         }
 
         if (delta > 0) {
             Product product = productRepository.findById(productId).orElse(null);
-            if (product == null || item.quantity + delta > product.stock) {
+            if (product == null || item.quantity + delta > availableStock(product, variantId)) {
                 return ResponseEntity.badRequest().body(Map.of("error", "Stock insuficiente"));
             }
         }
@@ -191,14 +235,14 @@ public class CartController {
 
         if (isGuest(userToken)) {
             List<CartItem> list = store.carts.getOrDefault(userToken, new ArrayList<>());
-            list.removeIf(i -> i.productId.equals(item.productId) && Objects.equals(i.variant, item.variant));
+            list.removeIf(i -> i.productId.equals(item.productId) && Objects.equals(i.variantId, item.variantId));
             store.carts.put(userToken, list);
             return ResponseEntity.ok(list);
         }
 
         List<CartItem> cart = cartItemRepository.findByUserId(userToken);
         List<CartItem> toDelete = cart.stream()
-                .filter(i -> i.productId.equals(item.productId) && Objects.equals(i.variant, item.variant))
+                .filter(i -> i.productId.equals(item.productId) && Objects.equals(i.variantId, item.variantId))
                 .toList();
         cartItemRepository.deleteAll(toDelete);
         return ResponseEntity.ok(cartItemRepository.findByUserId(userToken));
@@ -217,7 +261,7 @@ public class CartController {
 
         for (CartItem item : purchasedItems) {
             Product product = productRepository.findById(item.productId).orElse(null);
-            if (product == null || product.stock < item.quantity) {
+            if (product == null || availableStock(product, item.variantId) < item.quantity) {
                 String name = product != null ? product.name : item.productId;
                 return ResponseEntity.badRequest().body(Map.of("error", "Stock insuficiente para " + name));
             }
@@ -239,6 +283,13 @@ public class CartController {
             Product product = productRepository.findById(item.productId).orElse(null);
             product.stock -= item.quantity;
             productRepository.save(product);
+            if (item.variantId != null) {
+                ProductVariant variant = variantRepository.findById(item.variantId).orElse(null);
+                if (variant != null) {
+                    variant.stock -= item.quantity;
+                    variantRepository.save(variant);
+                }
+            }
         }
 
         double subtotal = purchasedItems.stream().mapToDouble(i -> i.price * i.quantity).sum();
@@ -251,7 +302,7 @@ public class CartController {
         } else {
             if (!purchasedItems.isEmpty()) {
                 List<Order.OrderItem> orderItems = purchasedItems.stream()
-                        .map(i -> new Order.OrderItem(i.productId, i.quantity, i.price))
+                        .map(i -> new Order.OrderItem(i.productId, i.quantity, i.price, i.variant))
                         .toList();
                 Order order = new Order(userToken, Instant.now(), orderItems, total, "COMPLETADA");
                 order.subtotal = subtotal;

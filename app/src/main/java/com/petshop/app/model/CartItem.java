@@ -18,6 +18,7 @@ public class CartItem {
     public String productId;
     public String name;
     public String variant;
+    public Long variantId;
     public int quantity;
     public double price;
 

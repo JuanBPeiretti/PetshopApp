@@ -1,7 +1,9 @@
 package com.petshop.app.controller;
 
 import com.petshop.app.model.Product;
+import com.petshop.app.model.ProductVariant;
 import com.petshop.app.repository.ProductRepository;
+import com.petshop.app.repository.ProductVariantRepository;
 import com.petshop.app.service.AdminGuard;
 import com.petshop.app.service.PriceAscStrategy;
 import com.petshop.app.service.PriceDescStrategy;
@@ -11,6 +13,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -19,13 +22,15 @@ import java.util.stream.Collectors;
 public class ProductController {
 
     private final ProductRepository productRepository;
+    private final ProductVariantRepository productVariantRepository;
     private final ProductSortStrategy priceAscStrategy;
     private final ProductSortStrategy priceDescStrategy;
     private final AdminGuard adminGuard;
 
-    public ProductController(ProductRepository productRepository, PriceAscStrategy priceAscStrategy,
-                              PriceDescStrategy priceDescStrategy, AdminGuard adminGuard) {
+    public ProductController(ProductRepository productRepository, ProductVariantRepository productVariantRepository,
+                              PriceAscStrategy priceAscStrategy, PriceDescStrategy priceDescStrategy, AdminGuard adminGuard) {
         this.productRepository = productRepository;
+        this.productVariantRepository = productVariantRepository;
         this.priceAscStrategy = priceAscStrategy;
         this.priceDescStrategy = priceDescStrategy;
         this.adminGuard = adminGuard;
@@ -52,7 +57,21 @@ public class ProductController {
             filtered = strategy.sort(filtered);
         }
 
+        attachHasVariants(filtered);
         return filtered;
+    }
+
+    private void attachHasVariants(List<Product> products) {
+        List<String> ids = products.stream().map(p -> p.id).toList();
+        if (ids.isEmpty()) {
+            return;
+        }
+        Set<String> withVariants = productVariantRepository.findByProductIdIn(ids).stream()
+                .map(v -> v.productId)
+                .collect(Collectors.toSet());
+        for (Product p : products) {
+            p.hasVariants = withVariants.contains(p.id);
+        }
     }
 
     private ProductSortStrategy resolveStrategy(String sort) {
@@ -67,7 +86,11 @@ public class ProductController {
 
     @GetMapping("/{id}")
     public Product get(@PathVariable String id) {
-        return productRepository.findById(id).orElse(null);
+        Product product = productRepository.findById(id).orElse(null);
+        if (product != null) {
+            product.hasVariants = !productVariantRepository.findByProductId(id).isEmpty();
+        }
+        return product;
     }
 
     @PostMapping
@@ -112,6 +135,7 @@ public class ProductController {
             return ResponseEntity.badRequest().body(Map.of("error", "Producto no encontrado"));
         }
 
+        productVariantRepository.deleteAll(productVariantRepository.findByProductId(id));
         productRepository.deleteById(id);
         return ResponseEntity.ok(Map.of("ok", true));
     }

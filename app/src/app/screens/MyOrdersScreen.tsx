@@ -142,6 +142,7 @@ export function MyOrdersScreen({ authToken }: Props) {
                       <thead>
                         <tr>
                           <th>Producto</th>
+                          <th>Variante</th>
                           <th>Cantidad</th>
                           <th>Precio</th>
                           <th>Acción</th>
@@ -151,6 +152,7 @@ export function MyOrdersScreen({ authToken }: Props) {
                         {order.items.map((item, idx) => (
                           <tr key={`${order.id}-${item.productId}-${idx}`}>
                             <td>{item.productId}</td>
+                            <td>{item.variant || "—"}</td>
                             <td>{item.quantity}</td>
                             <td>{formatMoney(item.price)}</td>
                             <td>

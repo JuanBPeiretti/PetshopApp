@@ -45,7 +45,7 @@ export function CartScreen({ items, requireShipping, onRemove, onCheckout, onInc
         <div className="cart-layout">
           <div className="cart-list">
             {items.map((item) => (
-              <div key={`${item.productId}-${item.variant}`} className="cart-item-card">
+              <div key={`${item.productId}-${item.variantId ?? item.variant}`} className="cart-item-card">
                 <div className="cart-thumb">
                   <img
                     src="https://images.unsplash.com/photo-1583337130417-3346a1be7dee?auto=format&fit=crop&w=300&q=80"

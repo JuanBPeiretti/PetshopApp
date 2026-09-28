@@ -101,7 +101,7 @@ export function ProductsScreen({
                   <span className="promo-tag">{product.tipoPromocion}</span>
                 ) : null}
                 <button className="primary-btn block" onClick={() => onAddToCart(product)} disabled={product.stock <= 0}>
-                  {product.stock <= 0 ? "Sin stock" : "Agregar al carrito"}
+                  {product.stock <= 0 ? "Sin stock" : product.hasVariants ? "Ver opciones" : "Agregar al carrito"}
                 </button>
               </div>
             </article>

@@ -1,4 +1,4 @@
-import type { CartItem, Category, CheckoutResult, OrderRecord, OrderStats, Product, ReturnRecord, Review, ShippingInfo, User } from "./types";
+import type { CartItem, Category, CheckoutResult, OrderRecord, OrderStats, Product, ProductVariant, ReturnRecord, Review, ShippingInfo, User } from "./types";
 
 const API_BASE_URL = "http://localhost:8080/api";
 const API_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, "");
@@ -102,6 +102,42 @@ export async function fetchProductReviews(productId: string): Promise<Review[]> 
   return request<Review[]>(`/products/${productId}/reviews`);
 }
 
+export async function fetchProductVariants(productId: string): Promise<ProductVariant[]> {
+  return request<ProductVariant[]>(`/products/${productId}/variants`);
+}
+
+export async function createProductVariant(
+  token: string,
+  productId: string,
+  variant: Partial<ProductVariant>,
+): Promise<ProductVariant> {
+  return request<ProductVariant>(`/products/${productId}/variants`, {
+    method: "POST",
+    headers: { "X-Auth-Token": token },
+    body: JSON.stringify(variant),
+  });
+}
+
+export async function updateProductVariant(
+  token: string,
+  productId: string,
+  variantId: number,
+  variant: Partial<ProductVariant>,
+): Promise<ProductVariant> {
+  return request<ProductVariant>(`/products/${productId}/variants/${variantId}`, {
+    method: "PUT",
+    headers: { "X-Auth-Token": token },
+    body: JSON.stringify(variant),
+  });
+}
+
+export async function deleteProductVariant(token: string, productId: string, variantId: number): Promise<{ ok: boolean }> {
+  return request<{ ok: boolean }>(`/products/${productId}/variants/${variantId}`, {
+    method: "DELETE",
+    headers: { "X-Auth-Token": token },
+  });
+}
+
 export async function submitReview(token: string, productId: string, rating: number, comment: string): Promise<Review> {
   return request<Review>(`/products/${productId}/reviews`, {
     method: "POST",
@@ -192,15 +228,17 @@ export async function removeFromCart(token: string | null, item: CartItem): Prom
   });
 }
 
-export async function incrementCartItem(token: string | null, productId: string): Promise<CartItem[]> {
-  return request<CartItem[]>(`/cart/items/${productId}/increment`, {
+export async function incrementCartItem(token: string | null, productId: string, variantId?: number | null): Promise<CartItem[]> {
+  const query = variantId != null ? `?variantId=${variantId}` : "";
+  return request<CartItem[]>(`/cart/items/${productId}/increment${query}`, {
     method: "PUT",
     headers: cartHeaders(token),
   });
 }
 
-export async function decrementCartItem(token: string | null, productId: string): Promise<CartItem[]> {
-  return request<CartItem[]>(`/cart/items/${productId}/decrement`, {
+export async function decrementCartItem(token: string | null, productId: string, variantId?: number | null): Promise<CartItem[]> {
+  const query = variantId != null ? `?variantId=${variantId}` : "";
+  return request<CartItem[]>(`/cart/items/${productId}/decrement${query}`, {
     method: "PUT",
     headers: cartHeaders(token),
   });

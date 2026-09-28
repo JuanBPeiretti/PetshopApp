@@ -3,10 +3,12 @@ package com.petshop.app;
 import com.petshop.app.controller.CartController;
 import com.petshop.app.model.CartItem;
 import com.petshop.app.model.Product;
+import com.petshop.app.model.ProductVariant;
 import com.petshop.app.model.Order;
 import com.petshop.app.repository.CartItemRepository;
 import com.petshop.app.repository.OrderRepository;
 import com.petshop.app.repository.ProductRepository;
+import com.petshop.app.repository.ProductVariantRepository;
 import com.petshop.app.service.InMemoryStore;
 import com.petshop.app.service.JwtUtil;
 import com.petshop.app.service.NotificationService;
@@ -39,6 +41,7 @@ class AppApplicationTests {
     private List<Order> savedOrders;
     private JwtUtil jwtUtil;
     private NotificationService notificationService;
+    private ProductVariantRepository variantRepository;
     private CartController cartController;
 
     @BeforeEach
@@ -76,7 +79,8 @@ class AppApplicationTests {
         });
 
         notificationService = mock(NotificationService.class);
-        cartController = new CartController(store, productRepository, cartItemRepository, orderRepository, jwtUtil, notificationService);
+        variantRepository = mock(ProductVariantRepository.class);
+        cartController = new CartController(store, productRepository, cartItemRepository, orderRepository, jwtUtil, notificationService, variantRepository);
     }
 
     @Test
@@ -191,17 +195,17 @@ class AppApplicationTests {
         String token = jwtUtil.generateToken("user-1", "user1@example.com", "CUSTOMER");
         cartController.add(token, null, new CartItem("p-cart-3", "Producto stepper", "alimentos", 1, 300.0));
 
-        ResponseEntity<?> incremented = cartController.increment(token, null, "p-cart-3");
+        ResponseEntity<?> incremented = cartController.increment(token, null, "p-cart-3", null);
         List<CartItem> afterIncrement = (List<CartItem>) incremented.getBody();
         assertThat(afterIncrement).hasSize(1);
         assertThat(afterIncrement.get(0).quantity).isEqualTo(2);
 
-        ResponseEntity<?> decremented = cartController.decrement(token, null, "p-cart-3");
+        ResponseEntity<?> decremented = cartController.decrement(token, null, "p-cart-3", null);
         List<CartItem> afterDecrement = (List<CartItem>) decremented.getBody();
         assertThat(afterDecrement).hasSize(1);
         assertThat(afterDecrement.get(0).quantity).isEqualTo(1);
 
-        ResponseEntity<?> decrementedAgain = cartController.decrement(token, null, "p-cart-3");
+        ResponseEntity<?> decrementedAgain = cartController.decrement(token, null, "p-cart-3", null);
         List<CartItem> afterSecondDecrement = (List<CartItem>) decrementedAgain.getBody();
         assertThat(afterSecondDecrement).isEmpty();
         assertThat(persistedCart).isEmpty();
@@ -283,5 +287,91 @@ class AppApplicationTests {
 
         assertThat(response.getStatusCode().is4xxClientError()).isTrue();
         assertThat(persistedCart).isEmpty();
+    }
+
+    @Test
+    void variantsTrackStockIndependentlyFromEachOtherAndFromProductStock() {
+        Product product = new Product(
+            "p-variant-1",
+            "Remera para perro",
+            "Marca variantes",
+            800.0,
+            null,
+            4.5,
+            "/images/variant-test.jpg",
+            "Nuevo",
+            "accesorios",
+            100
+        );
+        when(productRepository.findById("p-variant-1")).thenReturn(Optional.of(product));
+
+        ProductVariant talleM = new ProductVariant("p-variant-1", "M", "Negro", 2);
+        talleM.id = 201L;
+        ProductVariant talleL = new ProductVariant("p-variant-1", "L", "Negro", 5);
+        talleL.id = 202L;
+        when(variantRepository.findById(201L)).thenReturn(Optional.of(talleM));
+        when(variantRepository.findById(202L)).thenReturn(Optional.of(talleL));
+
+        String token = jwtUtil.generateToken("user-1", "user1@example.com", "CUSTOMER");
+
+        CartItem itemM = new CartItem("p-variant-1", "Remera para perro", null, 2, 800.0);
+        itemM.variantId = 201L;
+        ResponseEntity<?> addedM = cartController.add(token, null, itemM);
+        assertThat(addedM.getStatusCode().is2xxSuccessful()).isTrue();
+
+        CartItem itemMExtra = new CartItem("p-variant-1", "Remera para perro", null, 1, 800.0);
+        itemMExtra.variantId = 201L;
+        ResponseEntity<?> rejectedM = cartController.add(token, null, itemMExtra);
+        assertThat(rejectedM.getStatusCode().is4xxClientError()).isTrue();
+
+        CartItem itemL = new CartItem("p-variant-1", "Remera para perro", null, 5, 800.0);
+        itemL.variantId = 202L;
+        ResponseEntity<?> addedL = cartController.add(token, null, itemL);
+        assertThat(addedL.getStatusCode().is2xxSuccessful()).isTrue();
+
+        List<CartItem> cart = (List<CartItem>) addedL.getBody();
+        assertThat(cart).hasSize(2);
+        assertThat(cart.get(0).variant).isEqualTo("Talle M / Negro");
+        assertThat(cart.get(1).variant).isEqualTo("Talle L / Negro");
+    }
+
+    @Test
+    void checkoutDecrementsVariantStockAndAggregateProductStock() {
+        Product product = new Product(
+            "p-variant-2",
+            "Correa ajustable",
+            "Marca variantes",
+            600.0,
+            null,
+            4.2,
+            "/images/variant-test-2.jpg",
+            "Nuevo",
+            "accesorios",
+            10
+        );
+        when(productRepository.findById("p-variant-2")).thenReturn(Optional.of(product));
+
+        ProductVariant variant = new ProductVariant("p-variant-2", null, "Rojo", 10);
+        variant.id = 301L;
+        when(variantRepository.findById(301L)).thenReturn(Optional.of(variant));
+
+        String token = jwtUtil.generateToken("user-1", "user1@example.com", "CUSTOMER");
+        CartItem item = new CartItem("p-variant-2", "Correa ajustable", null, 3, 600.0);
+        item.variantId = 301L;
+        cartController.add(token, null, item);
+
+        Map<String, String> shipping = Map.of(
+            "nombre", "Cliente Dos",
+            "direccion", "Calle Falsa 456",
+            "ciudad", "Rosario"
+        );
+        ResponseEntity<?> checkout = cartController.checkout(token, null, shipping);
+
+        assertThat(checkout.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(variant.stock).isEqualTo(7);
+        assertThat(product.stock).isEqualTo(7);
+
+        Order order = savedOrders.get(0);
+        assertThat(order.items.get(0).variant).isEqualTo("Rojo");
     }
 }

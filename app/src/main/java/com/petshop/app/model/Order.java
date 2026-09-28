@@ -56,6 +56,7 @@ public class Order {
         public String productId;
         public int quantity;
         public double price;
+        public String variant;
 
         public OrderItem() {}
 
@@ -63,6 +64,13 @@ public class Order {
             this.productId = productId;
             this.quantity = quantity;
             this.price = price;
+        }
+
+        public OrderItem(String productId, int quantity, double price, String variant) {
+            this.productId = productId;
+            this.quantity = quantity;
+            this.price = price;
+            this.variant = variant;
         }
     }
 }
