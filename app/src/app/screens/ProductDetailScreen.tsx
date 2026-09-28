@@ -137,51 +137,55 @@ export function ProductDetailScreen({ product, authToken, isAdmin, onBack, onAdd
             diario, entretenimiento o una rutina de cuidado más completa.
           </p>
 
-          {product.hasVariants ? (
-            <div className="variant-picker">
-              <span>Elegí una opción</span>
-              {variantsLoading ? (
-                <div className="empty-state">Cargando opciones...</div>
-              ) : variants.length === 0 ? (
-                <div className="empty-state">No hay opciones disponibles para este producto.</div>
-              ) : (
-                <div className="variant-chip-row">
-                  {variants.map((variant) => (
-                    <button
-                      key={variant.id}
-                      type="button"
-                      className={variant.id === selectedVariantId ? "variant-chip active" : "variant-chip"}
-                      onClick={() => setSelectedVariantId(variant.id)}
-                      disabled={variant.stock <= 0}
-                    >
-                      {variantLabel(variant)}
-                      <small>{variant.stock <= 0 ? "Sin stock" : `${variant.stock} disponibles`}</small>
-                    </button>
-                  ))}
+          {isAdmin ? null : (
+            <>
+              {product.hasVariants ? (
+                <div className="variant-picker">
+                  <span>Elegí una opción</span>
+                  {variantsLoading ? (
+                    <div className="empty-state">Cargando opciones...</div>
+                  ) : variants.length === 0 ? (
+                    <div className="empty-state">No hay opciones disponibles para este producto.</div>
+                  ) : (
+                    <div className="variant-chip-row">
+                      {variants.map((variant) => (
+                        <button
+                          key={variant.id}
+                          type="button"
+                          className={variant.id === selectedVariantId ? "variant-chip active" : "variant-chip"}
+                          onClick={() => setSelectedVariantId(variant.id)}
+                          disabled={variant.stock <= 0}
+                        >
+                          {variantLabel(variant)}
+                          <small>{variant.stock <= 0 ? "Sin stock" : `${variant.stock} disponibles`}</small>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          ) : null}
+              ) : null}
 
-          <div className="product-detail-actions">
-            <button
-              className="primary-btn"
-              onClick={() => {
-                const selectedVariant = variants.find((v) => v.id === selectedVariantId);
-                onAddToCart(product, selectedVariant);
-              }}
-              disabled={
-                product.stock <= 0 ||
-                (product.hasVariants && (variants.length === 0 || selectedVariantId == null))
-              }
-            >
-              {product.stock <= 0
-                ? "Sin stock"
-                : product.hasVariants && selectedVariantId == null
-                  ? "Elegí una opción"
-                  : "Agregar al carrito"}
-            </button>
-          </div>
+              <div className="product-detail-actions">
+                <button
+                  className="primary-btn"
+                  onClick={() => {
+                    const selectedVariant = variants.find((v) => v.id === selectedVariantId);
+                    onAddToCart(product, selectedVariant);
+                  }}
+                  disabled={
+                    product.stock <= 0 ||
+                    (product.hasVariants && (variants.length === 0 || selectedVariantId == null))
+                  }
+                >
+                  {product.stock <= 0
+                    ? "Sin stock"
+                    : product.hasVariants && selectedVariantId == null
+                      ? "Elegí una opción"
+                      : "Agregar al carrito"}
+                </button>
+              </div>
+            </>
+          )}
 
           <div className="detail-specs">
             <div>

@@ -173,6 +173,9 @@ function App() {
   }, []);
 
   const handleAddToCart = async (product: Product, variant?: ProductVariant) => {
+    if (currentUser?.role === "ADMIN") {
+      return;
+    }
     if (product.hasVariants && !variant) {
       openProduct(product.id);
       return;
@@ -286,6 +289,7 @@ function App() {
           onSearchChange={setSearch}
           onAddToCart={handleAddToCart}
           onOpenProduct={openProduct}
+          isAdmin={currentUser?.role === "ADMIN"}
         />
       );
     }
@@ -312,7 +316,14 @@ function App() {
     }
 
     if (view === "offers") {
-      return <OffersScreen products={products} onAddToCart={handleAddToCart} onOpenProduct={openProduct} />;
+      return (
+        <OffersScreen
+          products={products}
+          onAddToCart={handleAddToCart}
+          onOpenProduct={openProduct}
+          isAdmin={currentUser?.role === "ADMIN"}
+        />
+      );
     }
 
     if (view === "admin" && currentUser?.role === "ADMIN" && authToken) {
@@ -377,7 +388,9 @@ function App() {
             <button onClick={() => navigateTo("home")}>Inicio</button>
             <button onClick={() => navigateTo("products")}>Productos</button>
             <button onClick={() => navigateTo("offers")}>Ofertas</button>
-            <button onClick={() => navigateTo("cart")}>Carrito ({cartCount})</button>
+            {currentUser?.role !== "ADMIN" ? (
+              <button onClick={() => navigateTo("cart")}>Carrito ({cartCount})</button>
+            ) : null}
             {currentUser ? (
               <button onClick={() => navigateTo("orders")}>Mis pedidos</button>
             ) : null}

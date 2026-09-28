@@ -1,4 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import type { Category, OrderRecord, OrderStats, Product, ProductVariant, ReturnRecord, User } from "../types";
 import {
   createCategory,
@@ -207,6 +218,26 @@ export function AdminDashboardScreen({ authToken, categories, currentUserId }: P
     : orders;
 
   const orderStatuses = Array.from(new Set(orders.map((o) => o.estado)));
+
+  const revenueByDay = useMemo(() => {
+    const days: { date: string; label: string; total: number }[] = [];
+    const now = new Date();
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      days.push({ date: key, label: d.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" }), total: 0 });
+    }
+    const byDate = new Map(days.map((d) => [d.date, d]));
+    orders.forEach((order) => {
+      const key = new Date(order.fecha).toISOString().slice(0, 10);
+      const entry = byDate.get(key);
+      if (entry) {
+        entry.total += order.total;
+      }
+    });
+    return days;
+  }, [orders]);
 
   const ORDERS_PAGE_SIZE = 10;
   const [orderPage, setOrderPage] = useState(1);
@@ -513,6 +544,38 @@ export function AdminDashboardScreen({ authToken, categories, currentUserId }: P
                 <div className="stat-card">
                   <span>Órdenes de hoy</span>
                   <strong>{stats.ordersToday}</strong>
+                </div>
+              </div>
+
+              <div className="charts-grid">
+                <div className="chart-card">
+                  <h3>Ingresos — últimos 7 días</h3>
+                  <ResponsiveContainer width="100%" height={240}>
+                    <AreaChart data={revenueByDay}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#fed7aa" />
+                      <XAxis dataKey="label" stroke="#7c2d12" fontSize={12} />
+                      <YAxis stroke="#7c2d12" fontSize={12} width={70} />
+                      <Tooltip formatter={(value: number) => formatMoney(value)} />
+                      <Area type="monotone" dataKey="total" name="Ingresos" stroke="#f97316" fill="#fed7aa" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+
+                <div className="chart-card">
+                  <h3>Top productos vendidos</h3>
+                  {stats.topProducts.length === 0 ? (
+                    <div className="empty-state">Todavía no hay ventas.</div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={240}>
+                      <BarChart data={stats.topProducts} layout="vertical" margin={{ left: 24 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#fed7aa" />
+                        <XAxis type="number" stroke="#7c2d12" fontSize={12} allowDecimals={false} />
+                        <YAxis type="category" dataKey="name" width={130} stroke="#7c2d12" fontSize={11} />
+                        <Tooltip />
+                        <Bar dataKey="totalQuantity" name="Unidades" fill="#f97316" radius={[0, 6, 6, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
                 </div>
               </div>
 

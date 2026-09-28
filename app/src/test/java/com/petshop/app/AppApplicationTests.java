@@ -377,4 +377,31 @@ class AppApplicationTests {
         Order order = savedOrders.get(0);
         assertThat(order.items.get(0).variant).isEqualTo("Rojo");
     }
+
+    @Test
+    void adminsCannotUseTheCart() {
+        Product product = new Product(
+            "p-admin-cart",
+            "Producto",
+            "Marca",
+            100.0,
+            null,
+            4.0,
+            "/images/admin-cart.jpg",
+            "Nuevo",
+            "alimentos",
+            10
+        );
+        when(productRepository.findById("p-admin-cart")).thenReturn(Optional.of(product));
+
+        String adminToken = jwtUtil.generateToken("admin-1", "admin@example.com", "ADMIN");
+        CartItem item = new CartItem("p-admin-cart", "Producto", "alimentos", 1, 100.0);
+
+        assertThat(cartController.add(adminToken, null, item).getStatusCode().value()).isEqualTo(403);
+        assertThat(cartController.increment(adminToken, null, "p-admin-cart", null).getStatusCode().value()).isEqualTo(403);
+        assertThat(cartController.decrement(adminToken, null, "p-admin-cart", null).getStatusCode().value()).isEqualTo(403);
+        assertThat(cartController.remove(adminToken, null, item).getStatusCode().value()).isEqualTo(403);
+        assertThat(cartController.checkout(adminToken, null, null).getStatusCode().value()).isEqualTo(403);
+        assertThat(persistedCart).isEmpty();
+    }
 }

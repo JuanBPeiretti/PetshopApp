@@ -81,6 +81,10 @@ public class CartController {
         return userToken.startsWith(GUEST_PREFIX);
     }
 
+    private boolean isAdminToken(String token) {
+        return token != null && !token.isBlank() && jwtUtil.isTokenValid(token) && "ADMIN".equals(jwtUtil.extractRole(token));
+    }
+
     @GetMapping
     public ResponseEntity<?> getCart(@RequestHeader(value = "X-Auth-Token", required = false) String token,
                                       @RequestHeader(value = "X-Guest-Id", required = false) String guestId) {
@@ -95,6 +99,10 @@ public class CartController {
     public ResponseEntity<?> add(@RequestHeader(value = "X-Auth-Token", required = false) String token,
                                   @RequestHeader(value = "X-Guest-Id", required = false) String guestId,
                                   @RequestBody CartItem item) {
+        if (isAdminToken(token)) {
+            return ResponseEntity.status(403).body(Map.of("error", "Los administradores no pueden usar el carrito"));
+        }
+
         String userToken = resolveToken(token, guestId);
         if (item == null || item.productId == null || item.productId.isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("error", "Producto inválido"));
@@ -179,6 +187,10 @@ public class CartController {
     }
 
     private ResponseEntity<?> adjustQuantity(String token, String guestId, String productId, Long variantId, int delta) {
+        if (isAdminToken(token)) {
+            return ResponseEntity.status(403).body(Map.of("error", "Los administradores no pueden usar el carrito"));
+        }
+
         String userToken = resolveToken(token, guestId);
 
         if (isGuest(userToken)) {
@@ -231,6 +243,10 @@ public class CartController {
     public ResponseEntity<?> remove(@RequestHeader(value = "X-Auth-Token", required = false) String token,
                                      @RequestHeader(value = "X-Guest-Id", required = false) String guestId,
                                      @RequestBody CartItem item) {
+        if (isAdminToken(token)) {
+            return ResponseEntity.status(403).body(Map.of("error", "Los administradores no pueden usar el carrito"));
+        }
+
         String userToken = resolveToken(token, guestId);
 
         if (isGuest(userToken)) {
@@ -252,6 +268,10 @@ public class CartController {
     public ResponseEntity<?> checkout(@RequestHeader(value = "X-Auth-Token", required = false) String token,
                                        @RequestHeader(value = "X-Guest-Id", required = false) String guestId,
                                        @RequestBody(required = false) Map<String, String> body) {
+        if (isAdminToken(token)) {
+            return ResponseEntity.status(403).body(Map.of("error", "Los administradores no pueden usar el carrito"));
+        }
+
         String userToken = resolveToken(token, guestId);
         boolean guest = isGuest(userToken);
 

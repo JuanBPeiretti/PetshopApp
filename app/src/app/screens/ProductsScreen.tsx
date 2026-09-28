@@ -14,6 +14,7 @@ type Props = {
   onSearchChange: (value: string) => void;
   onAddToCart: (product: Product) => void;
   onOpenProduct: (id: string) => void;
+  isAdmin: boolean;
 };
 
 const formatMoney = (value: number) =>
@@ -30,6 +31,7 @@ export function ProductsScreen({
   onSearchChange,
   onAddToCart,
   onOpenProduct,
+  isAdmin,
 }: Props) {
   const [page, setPage] = useState(1);
 
@@ -115,9 +117,11 @@ export function ProductsScreen({
                 {product.precioPromocional != null && product.tipoPromocion ? (
                   <span className="promo-tag">{product.tipoPromocion}</span>
                 ) : null}
-                <button className="primary-btn block" onClick={() => onAddToCart(product)} disabled={product.stock <= 0}>
-                  {product.stock <= 0 ? "Sin stock" : product.hasVariants ? "Ver opciones" : "Agregar al carrito"}
-                </button>
+                {!isAdmin ? (
+                  <button className="primary-btn block" onClick={() => onAddToCart(product)} disabled={product.stock <= 0}>
+                    {product.stock <= 0 ? "Sin stock" : product.hasVariants ? "Ver opciones" : "Agregar al carrito"}
+                  </button>
+                ) : null}
               </div>
             </article>
           ))}

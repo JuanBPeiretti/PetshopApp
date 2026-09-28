@@ -98,9 +98,11 @@ export function HomeScreen({ categories, products, currentUser, onNavigate, onAd
                   <strong>{formatMoney(product.price)}</strong>
                   {product.oldPrice ? <span>{formatMoney(product.oldPrice)}</span> : null}
                 </div>
-                <button className="primary-btn block" onClick={() => onAddToCart(product)} disabled={product.stock <= 0}>
-                  {product.stock <= 0 ? "Sin stock" : product.hasVariants ? "Ver opciones" : "Agregar al carrito"}
-                </button>
+                {currentUser?.role !== "ADMIN" ? (
+                  <button className="primary-btn block" onClick={() => onAddToCart(product)} disabled={product.stock <= 0}>
+                    {product.stock <= 0 ? "Sin stock" : product.hasVariants ? "Ver opciones" : "Agregar al carrito"}
+                  </button>
+                ) : null}
               </div>
             </article>
           ))}
