@@ -1,5 +1,6 @@
 package com.petshop.app.controller;
 
+import com.petshop.app.dto.RegisterRequest;
 import com.petshop.app.dto.UserDTO;
 import com.petshop.app.model.ResetToken;
 import com.petshop.app.model.User;
@@ -8,6 +9,7 @@ import com.petshop.app.repository.UserRepository;
 import com.petshop.app.service.JwtUtil;
 import com.petshop.app.service.NotificationService;
 import io.jsonwebtoken.JwtException;
+import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
@@ -120,14 +122,10 @@ public class AuthController {
     }
 
     @PostMapping("/register")
-    public ResponseEntity<?> register(@RequestBody Map<String,String> body) {
-        String email = body.get("email");
-        String password = body.get("password");
-        String name = body.getOrDefault("name", "");
-
-        if (email == null || password == null) {
-            return ResponseEntity.badRequest().body(Map.of("error","Faltan campos"));
-        }
+    public ResponseEntity<?> register(@Valid @RequestBody RegisterRequest body) {
+        String email = body.email.trim();
+        String password = body.password;
+        String name = body.name != null ? body.name : "";
 
         if (userRepository.findByEmail(email).isPresent()) {
             return ResponseEntity.status(409).body(Map.of("error","Usuario ya existe"));
