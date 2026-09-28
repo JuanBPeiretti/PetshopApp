@@ -73,4 +73,4 @@ export type ReturnRecord = {
   requestedAt: string;
 };
 
-export type View = "home" | "products" | "offers" | "categories" | "cart" | "login" | "admin";
+export type View = "home" | "products" | "offers" | "categories" | "cart" | "login" | "admin" | "orders";

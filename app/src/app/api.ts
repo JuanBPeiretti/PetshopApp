@@ -146,6 +146,12 @@ export async function fetchAllOrders(token: string): Promise<OrderRecord[]> {
   });
 }
 
+export async function fetchMyOrders(token: string): Promise<OrderRecord[]> {
+  return request<OrderRecord[]>("/orders/me", {
+    headers: { "X-Auth-Token": token },
+  });
+}
+
 export async function fetchOrderStats(token: string): Promise<OrderStats> {
   return request<OrderStats>("/orders/stats", {
     headers: { "X-Auth-Token": token },
@@ -186,6 +192,25 @@ export async function deleteProduct(token: string, id: string): Promise<{ ok: bo
 export async function fetchAllReturns(token: string): Promise<ReturnRecord[]> {
   return request<ReturnRecord[]>("/returns", {
     headers: { "X-Auth-Token": token },
+  });
+}
+
+export async function fetchMyReturns(token: string): Promise<ReturnRecord[]> {
+  return request<ReturnRecord[]>("/returns/me", {
+    headers: { "X-Auth-Token": token },
+  });
+}
+
+export async function requestReturn(
+  token: string,
+  productId: string,
+  cantidad: number,
+  motivo: string,
+): Promise<ReturnRecord> {
+  return request<ReturnRecord>("/returns", {
+    method: "POST",
+    headers: { "X-Auth-Token": token },
+    body: JSON.stringify({ productId, cantidad, motivo }),
   });
 }
 

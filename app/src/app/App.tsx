@@ -6,6 +6,7 @@ import { LoginScreen } from "./screens/LoginScreen";
 import { ProductDetailScreen } from "./screens/ProductDetailScreen";
 import { OffersScreen } from "./screens/OffersScreen";
 import { AdminDashboardScreen } from "./screens/AdminDashboardScreen";
+import { MyOrdersScreen } from "./screens/MyOrdersScreen";
 import {
   addToCart,
   AUTH_TOKEN_KEY,
@@ -275,6 +276,10 @@ function App() {
       return <AdminDashboardScreen authToken={authToken} categories={categories} />;
     }
 
+    if (view === "orders" && currentUser && authToken) {
+      return <MyOrdersScreen authToken={authToken} />;
+    }
+
     return (
       <HomeScreen
         categories={categories}
@@ -316,6 +321,9 @@ function App() {
             <button onClick={() => navigateTo("products")}>Productos</button>
             <button onClick={() => navigateTo("offers")}>Ofertas</button>
             <button onClick={() => navigateTo("cart")}>Carrito ({cartCount})</button>
+            {currentUser ? (
+              <button onClick={() => navigateTo("orders")}>Mis pedidos</button>
+            ) : null}
             {currentUser?.role === "ADMIN" ? (
               <button onClick={() => navigateTo("admin")}>Admin</button>
             ) : null}

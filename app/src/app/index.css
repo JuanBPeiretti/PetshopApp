@@ -1133,3 +1133,71 @@ img {
   font-size: 1.7rem;
   color: var(--text, #111827);
 }
+
+.my-orders-list {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.my-order-card {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.my-order-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.my-order-header > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.my-order-header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.my-order-date {
+  color: #94a3b8;
+  font-size: 0.82rem;
+}
+
+.return-form {
+  border-top: 1px dashed #e2e8f0;
+  padding-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.return-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: #475569;
+  max-width: 320px;
+}
+
+.return-form input {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  min-height: 42px;
+  background: #fff;
+  color: #111827;
+  padding: 0 12px;
+}
