@@ -7,6 +7,7 @@ import com.petshop.app.model.User;
 import com.petshop.app.repository.ResetTokenRepository;
 import com.petshop.app.repository.UserRepository;
 import com.petshop.app.service.JwtUtil;
+import com.petshop.app.service.LoginRateLimiter;
 import com.petshop.app.service.NotificationService;
 import io.jsonwebtoken.JwtException;
 import jakarta.validation.Valid;
@@ -29,14 +30,17 @@ public class AuthController {
     private final UserRepository userRepository;
     private final ResetTokenRepository resetTokenRepository;
     private final NotificationService notificationService;
+    private final LoginRateLimiter loginRateLimiter;
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     private static final Logger RESET_LOG = LoggerFactory.getLogger("resetTokenLogger");
 
-    public AuthController(JwtUtil jwtUtil, UserRepository userRepository, ResetTokenRepository resetTokenRepository, NotificationService notificationService) {
+    public AuthController(JwtUtil jwtUtil, UserRepository userRepository, ResetTokenRepository resetTokenRepository,
+                           NotificationService notificationService, LoginRateLimiter loginRateLimiter) {
         this.jwtUtil = jwtUtil;
         this.userRepository = userRepository;
         this.resetTokenRepository = resetTokenRepository;
         this.notificationService = notificationService;
+        this.loginRateLimiter = loginRateLimiter;
     }
 
     @PostMapping("/login")
@@ -44,8 +48,16 @@ public class AuthController {
         String email = body.get("email") != null ? body.get("email").trim() : null;
         String password = body.get("password");
 
+        long lockedSeconds = loginRateLimiter.secondsLockedOut(email);
+        if (lockedSeconds > 0) {
+            long minutes = (lockedSeconds + 59) / 60;
+            return ResponseEntity.status(429).body(Map.of("error",
+                    "Demasiados intentos fallidos. Probá de nuevo en " + minutes + " minuto(s)."));
+        }
+
         User u = userRepository.findByEmail(email).orElse(null);
         if (u != null && passwordEncoder.matches(password, u.password)) {
+            loginRateLimiter.recordSuccess(email);
             String token = jwtUtil.generateToken(u.id, u.email, u.role);
             Map<String,Object> resp = new HashMap<>();
             resp.put("token",token);
@@ -53,6 +65,7 @@ public class AuthController {
             return ResponseEntity.ok(resp);
         }
 
+        loginRateLimiter.recordFailure(email);
         return ResponseEntity.status(401).body(Map.of("error","Credenciales inválidas"));
     }
 
