@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/products")
@@ -31,10 +32,20 @@ public class ProductController {
     }
 
     @GetMapping
-    public List<Product> list(@RequestParam(required = false) String category, @RequestParam(required = false) String sort) {
+    public List<Product> list(@RequestParam(required = false) String category,
+                               @RequestParam(required = false) String sort,
+                               @RequestParam(required = false) String search) {
         List<Product> filtered = (category == null || category.isBlank())
                 ? productRepository.findAll()
                 : productRepository.findByCategoryIdIgnoreCase(category);
+
+        if (search != null && !search.isBlank()) {
+            String needle = search.trim().toLowerCase();
+            filtered = filtered.stream()
+                    .filter(p -> (p.name != null && p.name.toLowerCase().contains(needle))
+                            || (p.brand != null && p.brand.toLowerCase().contains(needle)))
+                    .collect(Collectors.toList());
+        }
 
         ProductSortStrategy strategy = resolveStrategy(sort);
         if (strategy != null) {

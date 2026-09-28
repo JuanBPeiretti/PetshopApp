@@ -24,6 +24,7 @@ public class CartController {
 
     private static final String GUEST_PREFIX = "guest:";
     private static final String GUEST_FALLBACK = "guest:unknown";
+    private static final double SHIPPING_COST = 1500.0;
 
     private final InMemoryStore store;
     private final ProductRepository productRepository;
@@ -205,10 +206,12 @@ public class CartController {
 
     @PostMapping("/checkout")
     public ResponseEntity<?> checkout(@RequestHeader(value = "X-Auth-Token", required = false) String token,
-                                       @RequestHeader(value = "X-Guest-Id", required = false) String guestId) {
+                                       @RequestHeader(value = "X-Guest-Id", required = false) String guestId,
+                                       @RequestBody(required = false) Map<String, String> body) {
         String userToken = resolveToken(token, guestId);
+        boolean guest = isGuest(userToken);
 
-        List<CartItem> purchasedItems = isGuest(userToken)
+        List<CartItem> purchasedItems = guest
                 ? store.carts.getOrDefault(userToken, new ArrayList<>())
                 : cartItemRepository.findByUserId(userToken);
 
@@ -220,27 +223,60 @@ public class CartController {
             }
         }
 
+        Map<String, String> shipping = body != null ? body : Map.of();
+        String shippingName = shipping.getOrDefault("nombre", "").trim();
+        String shippingAddress = shipping.getOrDefault("direccion", "").trim();
+        String shippingCity = shipping.getOrDefault("ciudad", "").trim();
+        String shippingPostalCode = shipping.getOrDefault("codigoPostal", "").trim();
+        String shippingPhone = shipping.getOrDefault("telefono", "").trim();
+
+        if (!guest && !purchasedItems.isEmpty()
+                && (shippingName.isEmpty() || shippingAddress.isEmpty() || shippingCity.isEmpty())) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Completa los datos de envío (nombre, dirección y ciudad)"));
+        }
+
         for (CartItem item : purchasedItems) {
             Product product = productRepository.findById(item.productId).orElse(null);
             product.stock -= item.quantity;
             productRepository.save(product);
         }
 
-        if (isGuest(userToken)) {
+        double subtotal = purchasedItems.stream().mapToDouble(i -> i.price * i.quantity).sum();
+        double shippingCost = purchasedItems.isEmpty() ? 0 : SHIPPING_COST;
+        double total = subtotal + shippingCost;
+        Long orderId = null;
+
+        if (guest) {
             store.carts.remove(userToken);
         } else {
             if (!purchasedItems.isEmpty()) {
                 List<Order.OrderItem> orderItems = purchasedItems.stream()
                         .map(i -> new Order.OrderItem(i.productId, i.quantity, i.price))
                         .toList();
-                double total = purchasedItems.stream().mapToDouble(i -> i.price * i.quantity).sum();
-                orderRepository.save(new Order(userToken, Instant.now(), orderItems, total, "COMPLETADA"));
+                Order order = new Order(userToken, Instant.now(), orderItems, total, "COMPLETADA");
+                order.subtotal = subtotal;
+                order.shippingCost = shippingCost;
+                order.shippingName = shippingName;
+                order.shippingAddress = shippingAddress;
+                order.shippingCity = shippingCity;
+                order.shippingPostalCode = shippingPostalCode;
+                order.shippingPhone = shippingPhone;
+                orderRepository.save(order);
+                orderId = order.id;
 
                 String email = jwtUtil.extractEmail(token);
                 notificationService.notify(email, "Tu compra de " + purchasedItems.size() + " producto(s) se realizó con éxito.");
             }
             cartItemRepository.deleteAll(purchasedItems);
         }
-        return ResponseEntity.ok(Map.of("ok", true, "items", purchasedItems));
+
+        Map<String, Object> response = new java.util.HashMap<>();
+        response.put("ok", true);
+        response.put("items", purchasedItems);
+        response.put("subtotal", subtotal);
+        response.put("shippingCost", shippingCost);
+        response.put("total", total);
+        response.put("orderId", orderId);
+        return ResponseEntity.ok(response);
     }
 }

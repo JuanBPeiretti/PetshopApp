@@ -5,8 +5,10 @@ type Props = {
   loading: boolean;
   categoryFilter: string;
   sort: string;
+  search: string;
   onCategoryChange: (value: string) => void;
   onSortChange: (value: string) => void;
+  onSearchChange: (value: string) => void;
   onAddToCart: (product: Product) => void;
   onOpenProduct: (id: string) => void;
 };
@@ -19,8 +21,10 @@ export function ProductsScreen({
   loading,
   categoryFilter,
   sort,
+  search,
   onCategoryChange,
   onSortChange,
+  onSearchChange,
   onAddToCart,
   onOpenProduct,
 }: Props) {
@@ -28,6 +32,15 @@ export function ProductsScreen({
     <div className="page-shell">
       <section className="toolbar-card">
         <div className="toolbar-row">
+          <label className="toolbar-search">
+            <span>Buscar</span>
+            <input
+              value={search}
+              onChange={(e) => onSearchChange(e.target.value)}
+              placeholder="Nombre o marca..."
+            />
+          </label>
+
           <label>
             <span>Categoría</span>
             <select value={categoryFilter} onChange={(e) => onCategoryChange(e.target.value)}>

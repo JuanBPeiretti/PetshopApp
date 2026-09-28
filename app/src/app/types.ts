@@ -82,4 +82,34 @@ export type Review = {
   createdAt: string;
 };
 
-export type View = "home" | "products" | "offers" | "categories" | "cart" | "login" | "admin" | "orders" | "account";
+export type ShippingInfo = {
+  nombre: string;
+  direccion: string;
+  ciudad: string;
+  codigoPostal: string;
+  telefono: string;
+};
+
+export type CheckoutResult = {
+  ok: boolean;
+  items: CartItem[];
+  subtotal: number;
+  shippingCost: number;
+  total: number;
+  orderId: number | null;
+};
+
+export type View =
+  | "home"
+  | "products"
+  | "offers"
+  | "categories"
+  | "cart"
+  | "login"
+  | "admin"
+  | "orders"
+  | "account"
+  | "confirmation"
+  | "terms"
+  | "privacy"
+  | "contact";

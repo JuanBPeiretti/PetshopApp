@@ -1,11 +1,13 @@
-import type { CartItem, Category, OrderRecord, OrderStats, Product, ReturnRecord, Review, User } from "./types";
+import type { CartItem, Category, CheckoutResult, OrderRecord, OrderStats, Product, ReturnRecord, Review, ShippingInfo, User } from "./types";
 
 const API_BASE_URL = "http://localhost:8080/api";
+const API_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, "");
 export const AUTH_TOKEN_KEY = "petshop_auth_token";
 export const AUTH_USER_KEY = "petshop_auth_user";
 export const GUEST_ID_KEY = "petshop_guest_id";
+export const UNAUTHORIZED_EVENT = "petshop:unauthorized";
 
-async function request<T>(input: string, init?: RequestInit): Promise<T> {
+async function request<T>(input: string, init?: (RequestInit & { skipAuthRedirect?: boolean })): Promise<T> {
   const headers = new Headers(init?.headers ?? {});
   if (!headers.has("Content-Type") && !(init?.body instanceof FormData)) {
     headers.set("Content-Type", "application/json");
@@ -24,6 +26,9 @@ async function request<T>(input: string, init?: RequestInit): Promise<T> {
       if (parsed.error) message = parsed.error;
     } catch {
       // not JSON, keep raw text
+    }
+    if (response.status === 401 && !init?.skipAuthRedirect) {
+      window.dispatchEvent(new CustomEvent(UNAUTHORIZED_EVENT));
     }
     throw new Error(message);
   }
@@ -80,10 +85,11 @@ export async function deleteCategory(token: string, id: string): Promise<{ ok: b
   });
 }
 
-export async function fetchProducts(category?: string, sort?: string): Promise<Product[]> {
+export async function fetchProducts(category?: string, sort?: string, search?: string): Promise<Product[]> {
   const params = new URLSearchParams();
   if (category && category !== "all") params.set("category", category);
   if (sort) params.set("sort", sort);
+  if (search && search.trim()) params.set("search", search.trim());
   const query = params.toString();
   return request<Product[]>(`/products${query ? `?${query}` : ""}`);
 }
@@ -108,6 +114,7 @@ export async function login(email: string, password: string): Promise<{ token: s
   return request<{ token: string; user: User }>("/auth/login", {
     method: "POST",
     body: JSON.stringify({ email, password }),
+    skipAuthRedirect: true,
   });
 }
 
@@ -153,6 +160,7 @@ export async function changePassword(token: string, currentPassword: string, new
     method: "POST",
     headers: { "X-Auth-Token": token },
     body: JSON.stringify({ currentPassword, newPassword }),
+    skipAuthRedirect: true,
   });
 }
 
@@ -198,10 +206,11 @@ export async function decrementCartItem(token: string | null, productId: string)
   });
 }
 
-export async function checkoutCart(token?: string | null): Promise<{ ok: boolean; items: CartItem[] }> {
-  return request<{ ok: boolean; items: CartItem[] }>("/cart/checkout", {
+export async function checkoutCart(token: string | null, shipping?: Partial<ShippingInfo>): Promise<CheckoutResult> {
+  return request<CheckoutResult>("/cart/checkout", {
     method: "POST",
     headers: cartHeaders(token),
+    body: JSON.stringify(shipping || {}),
   });
 }
 
@@ -229,6 +238,17 @@ export async function updateOrderStatus(token: string, orderId: number, estado: 
     headers: { "X-Auth-Token": token },
     body: JSON.stringify({ estado }),
   });
+}
+
+export async function uploadImage(token: string, file: File): Promise<string> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const result = await request<{ url: string }>("/uploads", {
+    method: "POST",
+    headers: { "X-Auth-Token": token },
+    body: formData,
+  });
+  return `${API_ORIGIN}${result.url}`;
 }
 
 export async function createProduct(token: string, product: Partial<Product>): Promise<Product> {

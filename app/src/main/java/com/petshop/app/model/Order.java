@@ -30,8 +30,16 @@ public class Order {
     @CollectionTable(name = "order_items", joinColumns = @JoinColumn(name = "order_id"))
     public List<OrderItem> items = new ArrayList<>();
 
+    public double subtotal;
+    public double shippingCost;
     public double total;
     public String estado;
+
+    public String shippingName;
+    public String shippingAddress;
+    public String shippingCity;
+    public String shippingPostalCode;
+    public String shippingPhone;
 
     public Order() {}
 

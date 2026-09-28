@@ -114,11 +114,19 @@ class AppApplicationTests {
         assertThat(itemsAfterMerge.get(0).quantity).isEqualTo(2);
         assertThat(persistedCart).hasSize(1);
 
-        ResponseEntity<?> checkout = cartController.checkout(token, null);
+        Map<String, String> shipping = Map.of(
+            "nombre", "Cliente Uno",
+            "direccion", "Calle Falsa 123",
+            "ciudad", "Buenos Aires"
+        );
+        ResponseEntity<?> checkout = cartController.checkout(token, null, shipping);
         assertThat(checkout.getStatusCode().is2xxSuccessful()).isTrue();
 
         Map<?, ?> body = (Map<?, ?>) checkout.getBody();
         assertThat(body.get("ok")).isEqualTo(true);
+        assertThat(body.get("subtotal")).isEqualTo(1900.0);
+        assertThat(body.get("shippingCost")).isEqualTo(1500.0);
+        assertThat(body.get("total")).isEqualTo(3400.0);
         assertThat(persistedCart).isEmpty();
         assertThat(product.stock).isEqualTo(13);
         verify(notificationService).notify("user1@example.com", "Tu compra de 1 producto(s) se realizó con éxito.");
@@ -127,11 +135,41 @@ class AppApplicationTests {
         Order order = savedOrders.get(0);
         assertThat(order.userId).isEqualTo("user-1");
         assertThat(order.estado).isEqualTo("COMPLETADA");
-        assertThat(order.total).isEqualTo(1900.0);
+        assertThat(order.subtotal).isEqualTo(1900.0);
+        assertThat(order.shippingCost).isEqualTo(1500.0);
+        assertThat(order.total).isEqualTo(3400.0);
+        assertThat(order.shippingName).isEqualTo("Cliente Uno");
+        assertThat(order.shippingCity).isEqualTo("Buenos Aires");
         assertThat(order.items).hasSize(1);
         assertThat(order.items.get(0).productId).isEqualTo("p-cart-1");
         assertThat(order.items.get(0).quantity).isEqualTo(2);
         assertThat(order.items.get(0).price).isEqualTo(950.0);
+    }
+
+    @Test
+    void checkoutRequiresShippingInfoForLoggedInUsers() {
+        Product product = new Product(
+            "p-cart-6",
+            "Producto envio",
+            "Marca carrito",
+            400.0,
+            null,
+            4.0,
+            "/images/cart-test-6.jpg",
+            "Nuevo",
+            "alimentos",
+            10
+        );
+        when(productRepository.findById("p-cart-6")).thenReturn(Optional.of(product));
+
+        String token = jwtUtil.generateToken("user-1", "user1@example.com", "CUSTOMER");
+        cartController.add(token, null, new CartItem("p-cart-6", "Producto envio", "alimentos", 1, 400.0));
+
+        ResponseEntity<?> checkout = cartController.checkout(token, null, Map.of("nombre", "Solo nombre"));
+
+        assertThat(checkout.getStatusCode().is4xxClientError()).isTrue();
+        assertThat(persistedCart).hasSize(1);
+        assertThat(savedOrders).isEmpty();
     }
 
     @Test
@@ -193,7 +231,7 @@ class AppApplicationTests {
         assertThat(store.carts.get("guest:device-1").get(0).quantity).isEqualTo(2);
         assertThat(persistedCart).isEmpty();
 
-        cartController.checkout(null, "device-1");
+        cartController.checkout(null, "device-1", null);
         verifyNoInteractions(notificationService);
         verifyNoInteractions(orderRepository);
     }

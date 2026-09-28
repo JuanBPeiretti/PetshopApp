@@ -14,6 +14,7 @@ import {
   updateOrderStatus,
   updateProduct,
   updateReturnStatus,
+  uploadImage,
 } from "../api";
 
 type Props = {
@@ -58,6 +59,7 @@ export function AdminDashboardScreen({ authToken, categories }: Props) {
   const [productForm, setProductForm] = useState(EMPTY_PRODUCT_FORM);
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [productError, setProductError] = useState<string | null>(null);
+  const [imageUploading, setImageUploading] = useState(false);
 
   const [returns, setReturns] = useState<ReturnRecord[]>([]);
   const [returnsLoading, setReturnsLoading] = useState(false);
@@ -226,6 +228,23 @@ export function AdminDashboardScreen({ authToken, categories }: Props) {
       }
     } catch (error) {
       setActionError(error instanceof Error ? error.message : "No se pudo eliminar el producto");
+    }
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setProductError(null);
+    setImageUploading(true);
+    try {
+      const url = await uploadImage(authToken, file);
+      setProductForm((prev) => ({ ...prev, imageUrl: url }));
+    } catch (error) {
+      setProductError(error instanceof Error ? error.message : "No se pudo subir la imagen");
+    } finally {
+      setImageUploading(false);
+      e.target.value = "";
     }
   };
 
@@ -503,6 +522,14 @@ export function AdminDashboardScreen({ authToken, categories }: Props) {
             <label className="admin-form-wide">
               <span>URL de imagen</span>
               <input value={productForm.imageUrl} onChange={(e) => setProductForm({ ...productForm, imageUrl: e.target.value })} />
+            </label>
+            <label className="admin-form-wide">
+              <span>Subir imagen</span>
+              <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" onChange={handleImageUpload} disabled={imageUploading} />
+              {imageUploading ? <span className="upload-status">Subiendo...</span> : null}
+              {productForm.imageUrl ? (
+                <img src={productForm.imageUrl} alt="Vista previa" className="image-preview" />
+              ) : null}
             </label>
 
             {productError ? <div className="error-box admin-form-wide">{productError}</div> : null}

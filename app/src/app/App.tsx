@@ -8,6 +8,8 @@ import { OffersScreen } from "./screens/OffersScreen";
 import { AdminDashboardScreen } from "./screens/AdminDashboardScreen";
 import { MyOrdersScreen } from "./screens/MyOrdersScreen";
 import { MyAccountScreen } from "./screens/MyAccountScreen";
+import { OrderConfirmationScreen } from "./screens/OrderConfirmationScreen";
+import { LegalScreen } from "./screens/LegalScreen";
 import {
   addToCart,
   AUTH_TOKEN_KEY,
@@ -24,8 +26,9 @@ import {
   login,
   register,
   removeFromCart,
+  UNAUTHORIZED_EVENT,
 } from "./api";
-import type { CartItem, Category, Product, User, View } from "./types";
+import type { CartItem, CheckoutResult, Category, Product, ShippingInfo, User, View } from "./types";
 
 function App() {
   const [view, setView] = useState<View>("home");
@@ -40,8 +43,10 @@ function App() {
   const [authLoading, setAuthLoading] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [sort, setSort] = useState("");
+  const [search, setSearch] = useState("");
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [theme, setTheme] = useState<"light" | "soft" | "dark">("soft");
+  const [lastCheckout, setLastCheckout] = useState<CheckoutResult | null>(null);
 
   const cartCount = useMemo(
     () => cartItems.reduce((total, item) => total + item.quantity, 0),
@@ -62,10 +67,10 @@ function App() {
     }
   };
 
-  const loadProducts = async (category = selectedCategory, order = sort) => {
+  const loadProducts = async (category = selectedCategory, order = sort, query = search) => {
     setProductLoading(true);
     try {
-      const data = await fetchProducts(category, order);
+      const data = await fetchProducts(category, order, query);
       setProducts(data);
     } catch (error) {
       console.error("No se pudieron cargar los productos", error);
@@ -96,8 +101,11 @@ function App() {
   }, []);
 
   useEffect(() => {
-    void loadProducts(selectedCategory, sort);
-  }, [selectedCategory, sort]);
+    const timer = setTimeout(() => {
+      void loadProducts(selectedCategory, sort, search);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [selectedCategory, sort, search]);
 
   useEffect(() => {
     if (authToken) {
@@ -152,6 +160,18 @@ function App() {
     setView("home");
   };
 
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      if (!getAuthToken()) return;
+      handleLogout();
+      setAuthError("Tu sesión expiró. Iniciá sesión de nuevo.");
+      setView("login");
+    };
+    window.addEventListener(UNAUTHORIZED_EVENT, handleUnauthorized);
+    return () => window.removeEventListener(UNAUTHORIZED_EVENT, handleUnauthorized);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleAddToCart = async (product: Product) => {
     try {
       const nextItem: CartItem = {
@@ -179,11 +199,12 @@ function App() {
     }
   };
 
-  const handleCheckout = async () => {
+  const handleCheckout = async (shipping: Partial<ShippingInfo>) => {
     try {
-      await checkoutCart(authToken);
+      const result = await checkoutCart(authToken, shipping);
       setCartItems([]);
-      alert("Compra simulada completada.");
+      setLastCheckout(result);
+      setView("confirmation");
     } catch (error) {
       console.error("Error al finalizar la compra", error);
       alert(error instanceof Error ? error.message : "No se pudo completar la compra.");
@@ -250,14 +271,10 @@ function App() {
           loading={productLoading}
           categoryFilter={selectedCategory}
           sort={sort}
-          onCategoryChange={(categoryId) => {
-            setSelectedCategory(categoryId);
-            void loadProducts(categoryId, sort);
-          }}
-          onSortChange={(nextSort) => {
-            setSort(nextSort);
-            void loadProducts(selectedCategory, nextSort);
-          }}
+          search={search}
+          onCategoryChange={setSelectedCategory}
+          onSortChange={setSort}
+          onSearchChange={setSearch}
           onAddToCart={handleAddToCart}
           onOpenProduct={openProduct}
         />
@@ -268,12 +285,21 @@ function App() {
       return (
         <CartScreen
           items={cartItems}
+          requireShipping={!!currentUser}
           onRemove={handleRemoveFromCart}
           onCheckout={handleCheckout}
           onIncrement={handleIncrementCartItem}
           onDecrement={handleDecrementCartItem}
         />
       );
+    }
+
+    if (view === "confirmation" && lastCheckout) {
+      return <OrderConfirmationScreen result={lastCheckout} onNavigate={navigateTo} />;
+    }
+
+    if (view === "terms" || view === "privacy" || view === "contact") {
+      return <LegalScreen section={view} />;
     }
 
     if (view === "offers") {
@@ -391,6 +417,17 @@ function App() {
       </nav>
 
       <main className="page-container">{renderScreen()}</main>
+
+      <footer className="app-footer">
+        <div className="app-footer-inner">
+          <span>© {new Date().getFullYear()} PetshopApp — tienda de demostración</span>
+          <div className="app-footer-links">
+            <button onClick={() => navigateTo("terms")}>Términos y condiciones</button>
+            <button onClick={() => navigateTo("privacy")}>Privacidad</button>
+            <button onClick={() => navigateTo("contact")}>Contacto</button>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }
