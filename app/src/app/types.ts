@@ -73,4 +73,13 @@ export type ReturnRecord = {
   requestedAt: string;
 };
 
-export type View = "home" | "products" | "offers" | "categories" | "cart" | "login" | "admin" | "orders";
+export type Review = {
+  id: number;
+  productId: string;
+  authorName: string;
+  rating: number;
+  comment: string;
+  createdAt: string;
+};
+
+export type View = "home" | "products" | "offers" | "categories" | "cart" | "login" | "admin" | "orders" | "account";

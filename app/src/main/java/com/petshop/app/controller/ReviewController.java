@@ -1,8 +1,11 @@
 package com.petshop.app.controller;
 
+import com.petshop.app.dto.ReviewDTO;
 import com.petshop.app.model.Review;
+import com.petshop.app.model.User;
 import com.petshop.app.repository.ProductRepository;
 import com.petshop.app.repository.ReviewRepository;
+import com.petshop.app.repository.UserRepository;
 import com.petshop.app.service.JwtUtil;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -17,17 +20,23 @@ public class ReviewController {
 
     private final ReviewRepository reviewRepository;
     private final ProductRepository productRepository;
+    private final UserRepository userRepository;
     private final JwtUtil jwtUtil;
 
-    public ReviewController(ReviewRepository reviewRepository, ProductRepository productRepository, JwtUtil jwtUtil) {
+    public ReviewController(ReviewRepository reviewRepository, ProductRepository productRepository,
+                             UserRepository userRepository, JwtUtil jwtUtil) {
         this.reviewRepository = reviewRepository;
         this.productRepository = productRepository;
+        this.userRepository = userRepository;
         this.jwtUtil = jwtUtil;
     }
 
     @GetMapping
     public ResponseEntity<?> list(@PathVariable String productId) {
-        return ResponseEntity.ok(reviewRepository.findByProductIdOrderByCreatedAtDesc(productId));
+        List<ReviewDTO> reviews = reviewRepository.findByProductIdOrderByCreatedAtDesc(productId).stream()
+                .map(this::toDto)
+                .toList();
+        return ResponseEntity.ok(reviews);
     }
 
     @PostMapping
@@ -56,6 +65,12 @@ public class ReviewController {
 
         Review review = new Review(productId, userId, rating, comment, Instant.now());
         reviewRepository.save(review);
-        return ResponseEntity.ok(review);
+        return ResponseEntity.ok(toDto(review));
+    }
+
+    private ReviewDTO toDto(Review review) {
+        User author = userRepository.findById(review.userId).orElse(null);
+        String authorName = author != null && author.name != null && !author.name.isBlank() ? author.name : "Usuario";
+        return new ReviewDTO(review.id, review.productId, authorName, review.rating, review.comment, review.createdAt);
     }
 }

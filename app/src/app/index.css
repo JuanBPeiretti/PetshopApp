@@ -264,6 +264,8 @@ img {
   border-radius: 9999px;
   font-size: 0.85rem;
   font-weight: 700;
+  border: none;
+  cursor: pointer;
 }
 
 .page-container {
@@ -726,6 +728,17 @@ img {
   border-radius: 12px;
   padding: 10px 12px;
   font-weight: 700;
+}
+
+.info-box {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  word-break: break-word;
 }
 
 .center-link {
@@ -1200,4 +1213,134 @@ img {
   background: #fff;
   color: #111827;
   padding: 0 12px;
+}
+
+.reviews-section {
+  margin-top: 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.review-form {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  padding: 18px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 16px;
+}
+
+.review-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: #475569;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.review-form select,
+.review-form input {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  min-height: 42px;
+  background: #fff;
+  color: #111827;
+  padding: 0 12px;
+}
+
+.review-form input {
+  min-width: 260px;
+}
+
+.review-login-hint {
+  color: #64748b;
+}
+
+.reviews-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.review-card {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.review-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.review-card p {
+  margin: 0;
+  color: #334155;
+}
+
+.review-date {
+  color: #94a3b8;
+  font-size: 0.78rem;
+}
+
+.category-swatch {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  margin-right: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  vertical-align: middle;
+}
+
+.account-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 18px;
+}
+
+.account-card {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.account-card h3 {
+  margin: 0;
+}
+
+.account-card label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: #475569;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.account-card input {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  min-height: 42px;
+  background: #fff;
+  color: #111827;
+  padding: 0 12px;
+}
+
+.account-card input:disabled {
+  background: #f1f5f9;
+  color: #64748b;
 }

@@ -1,4 +1,4 @@
-import type { CartItem, Category, OrderRecord, OrderStats, Product, ReturnRecord, User } from "./types";
+import type { CartItem, Category, OrderRecord, OrderStats, Product, ReturnRecord, Review, User } from "./types";
 
 const API_BASE_URL = "http://localhost:8080/api";
 export const AUTH_TOKEN_KEY = "petshop_auth_token";
@@ -57,6 +57,29 @@ export async function fetchCategories(): Promise<Category[]> {
   return request<Category[]>("/categories");
 }
 
+export async function createCategory(token: string, category: Partial<Category>): Promise<Category> {
+  return request<Category>("/categories", {
+    method: "POST",
+    headers: { "X-Auth-Token": token },
+    body: JSON.stringify(category),
+  });
+}
+
+export async function updateCategory(token: string, id: string, category: Partial<Category>): Promise<Category> {
+  return request<Category>(`/categories/${id}`, {
+    method: "PUT",
+    headers: { "X-Auth-Token": token },
+    body: JSON.stringify(category),
+  });
+}
+
+export async function deleteCategory(token: string, id: string): Promise<{ ok: boolean }> {
+  return request<{ ok: boolean }>(`/categories/${id}`, {
+    method: "DELETE",
+    headers: { "X-Auth-Token": token },
+  });
+}
+
 export async function fetchProducts(category?: string, sort?: string): Promise<Product[]> {
   const params = new URLSearchParams();
   if (category && category !== "all") params.set("category", category);
@@ -67,6 +90,18 @@ export async function fetchProducts(category?: string, sort?: string): Promise<P
 
 export async function fetchProduct(id: string): Promise<Product> {
   return request<Product>(`/products/${id}`);
+}
+
+export async function fetchProductReviews(productId: string): Promise<Review[]> {
+  return request<Review[]>(`/products/${productId}/reviews`);
+}
+
+export async function submitReview(token: string, productId: string, rating: number, comment: string): Promise<Review> {
+  return request<Review>(`/products/${productId}/reviews`, {
+    method: "POST",
+    headers: { "X-Auth-Token": token },
+    body: JSON.stringify({ rating, comment }),
+  });
 }
 
 export async function login(email: string, password: string): Promise<{ token: string; user: User }> {
@@ -83,11 +118,41 @@ export async function register(email: string, password: string, name: string): P
   });
 }
 
+export async function recoverPassword(email: string): Promise<{ resetToken: string; expiresInMinutes: number }> {
+  return request<{ resetToken: string; expiresInMinutes: number }>("/auth/recover", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+}
+
+export async function resetPassword(token: string, password: string): Promise<{ ok: boolean }> {
+  return request<{ ok: boolean }>("/auth/reset", {
+    method: "POST",
+    body: JSON.stringify({ token, password }),
+  });
+}
+
 export async function fetchCurrentUser(token: string): Promise<User> {
   return request<User>("/auth/me", {
     headers: {
       "X-Auth-Token": token,
     },
+  });
+}
+
+export async function updateMyProfile(token: string, name: string): Promise<User> {
+  return request<User>("/auth/me", {
+    method: "PUT",
+    headers: { "X-Auth-Token": token },
+    body: JSON.stringify({ name }),
+  });
+}
+
+export async function changePassword(token: string, currentPassword: string, newPassword: string): Promise<{ ok: boolean }> {
+  return request<{ ok: boolean }>("/auth/change-password", {
+    method: "POST",
+    headers: { "X-Auth-Token": token },
+    body: JSON.stringify({ currentPassword, newPassword }),
   });
 }
 

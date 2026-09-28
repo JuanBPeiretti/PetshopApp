@@ -7,6 +7,7 @@ import { ProductDetailScreen } from "./screens/ProductDetailScreen";
 import { OffersScreen } from "./screens/OffersScreen";
 import { AdminDashboardScreen } from "./screens/AdminDashboardScreen";
 import { MyOrdersScreen } from "./screens/MyOrdersScreen";
+import { MyAccountScreen } from "./screens/MyAccountScreen";
 import {
   addToCart,
   AUTH_TOKEN_KEY,
@@ -232,7 +233,14 @@ function App() {
     }
 
     if (view === "products" && selectedProductId && selectedProduct) {
-      return <ProductDetailScreen product={selectedProduct} onBack={handleProductDetailBack} onAddToCart={handleAddToCart} />;
+      return (
+        <ProductDetailScreen
+          product={selectedProduct}
+          authToken={authToken}
+          onBack={handleProductDetailBack}
+          onAddToCart={handleAddToCart}
+        />
+      );
     }
 
     if (view === "products") {
@@ -278,6 +286,19 @@ function App() {
 
     if (view === "orders" && currentUser && authToken) {
       return <MyOrdersScreen authToken={authToken} />;
+    }
+
+    if (view === "account" && currentUser && authToken) {
+      return (
+        <MyAccountScreen
+          authToken={authToken}
+          currentUser={currentUser}
+          onProfileUpdated={(updated) => {
+            setCurrentUser(updated);
+            localStorage.setItem(AUTH_USER_KEY, JSON.stringify(updated));
+          }}
+        />
+      );
     }
 
     return (
@@ -359,7 +380,7 @@ function App() {
 
             {currentUser ? (
               <>
-                <span className="user-pill">{currentUser.name}</span>
+                <button className="user-pill" onClick={() => navigateTo("account")}>{currentUser.name}</button>
                 <button className="secondary-btn" onClick={handleLogout}>Salir</button>
               </>
             ) : (

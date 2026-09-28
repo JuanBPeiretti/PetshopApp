@@ -1,12 +1,16 @@
 import { useEffect, useState } from "react";
 import type { Category, OrderRecord, OrderStats, Product, ReturnRecord } from "../types";
 import {
+  createCategory,
   createProduct,
+  deleteCategory,
   deleteProduct,
   fetchAllOrders,
   fetchAllReturns,
+  fetchCategories,
   fetchOrderStats,
   fetchProducts,
+  updateCategory,
   updateOrderStatus,
   updateProduct,
   updateReturnStatus,
@@ -17,7 +21,9 @@ type Props = {
   categories: Category[];
 };
 
-type Tab = "stats" | "orders" | "products" | "returns";
+type Tab = "stats" | "orders" | "products" | "categories" | "returns";
+
+const EMPTY_CATEGORY_FORM = { id: "", name: "", color: "#f97316" };
 
 const formatMoney = (value: number) =>
   new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(value);
@@ -55,6 +61,12 @@ export function AdminDashboardScreen({ authToken, categories }: Props) {
 
   const [returns, setReturns] = useState<ReturnRecord[]>([]);
   const [returnsLoading, setReturnsLoading] = useState(false);
+
+  const [categoryList, setCategoryList] = useState<Category[]>(categories);
+  const [categoriesLoading, setCategoriesLoading] = useState(false);
+  const [categoryForm, setCategoryForm] = useState(EMPTY_CATEGORY_FORM);
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
+  const [categoryError, setCategoryError] = useState<string | null>(null);
 
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -106,11 +118,23 @@ export function AdminDashboardScreen({ authToken, categories }: Props) {
     }
   };
 
+  const loadCategories = async () => {
+    setCategoriesLoading(true);
+    try {
+      setCategoryList(await fetchCategories());
+    } catch (error) {
+      console.error("No se pudieron cargar las categorías", error);
+    } finally {
+      setCategoriesLoading(false);
+    }
+  };
+
   useEffect(() => {
     void loadStats();
     void loadOrders();
     void loadProducts();
     void loadReturns();
+    void loadCategories();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -205,6 +229,59 @@ export function AdminDashboardScreen({ authToken, categories }: Props) {
     }
   };
 
+  const startEditCategory = (category: Category) => {
+    setEditingCategoryId(category.id);
+    setCategoryForm({ id: category.id, name: category.name, color: category.color || "#f97316" });
+    setCategoryError(null);
+  };
+
+  const resetCategoryForm = () => {
+    setEditingCategoryId(null);
+    setCategoryForm(EMPTY_CATEGORY_FORM);
+    setCategoryError(null);
+  };
+
+  const handleCategorySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCategoryError(null);
+
+    if (!categoryForm.name.trim()) {
+      setCategoryError("Completa el nombre de la categoría.");
+      return;
+    }
+
+    const payload: Partial<Category> = {
+      id: categoryForm.id.trim() || undefined,
+      name: categoryForm.name.trim(),
+      color: categoryForm.color,
+    };
+
+    try {
+      if (editingCategoryId) {
+        await updateCategory(authToken, editingCategoryId, payload);
+      } else {
+        await createCategory(authToken, payload);
+      }
+      resetCategoryForm();
+      await loadCategories();
+    } catch (error) {
+      setCategoryError(error instanceof Error ? error.message : "No se pudo guardar la categoría");
+    }
+  };
+
+  const handleDeleteCategory = async (category: Category) => {
+    setActionError(null);
+    try {
+      await deleteCategory(authToken, category.id);
+      await loadCategories();
+      if (editingCategoryId === category.id) {
+        resetCategoryForm();
+      }
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "No se pudo eliminar la categoría");
+    }
+  };
+
   const handleReturnDecision = async (devolucion: ReturnRecord, estado: "APROBADA" | "RECHAZADA") => {
     setActionError(null);
     try {
@@ -232,6 +309,9 @@ export function AdminDashboardScreen({ authToken, categories }: Props) {
         </button>
         <button className={tab === "products" ? "admin-tab active" : "admin-tab"} onClick={() => setTab("products")}>
           Productos
+        </button>
+        <button className={tab === "categories" ? "admin-tab active" : "admin-tab"} onClick={() => setTab("categories")}>
+          Categorías
         </button>
         <button className={tab === "returns" ? "admin-tab active" : "admin-tab"} onClick={() => setTab("returns")}>
           Devoluciones pendientes {pendingReturns.length > 0 ? `(${pendingReturns.length})` : ""}
@@ -393,7 +473,7 @@ export function AdminDashboardScreen({ authToken, categories }: Props) {
               <span>Categoría</span>
               <select value={productForm.categoryId} onChange={(e) => setProductForm({ ...productForm, categoryId: e.target.value })}>
                 <option value="">Seleccionar...</option>
-                {categories.map((cat) => (
+                {categoryList.map((cat) => (
                   <option key={cat.id} value={cat.id}>
                     {cat.name}
                   </option>
@@ -474,6 +554,75 @@ export function AdminDashboardScreen({ authToken, categories }: Props) {
                             Editar
                           </button>
                           <button className="secondary-btn danger" onClick={() => handleDeleteProduct(product)}>
+                            Eliminar
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      ) : null}
+
+      {tab === "categories" ? (
+        <section className="admin-section">
+          <form className="admin-form-grid" onSubmit={handleCategorySubmit}>
+            <label>
+              <span>Nombre</span>
+              <input value={categoryForm.name} onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })} />
+            </label>
+            <label>
+              <span>Color</span>
+              <input
+                type="color"
+                value={categoryForm.color}
+                onChange={(e) => setCategoryForm({ ...categoryForm, color: e.target.value })}
+              />
+            </label>
+
+            {categoryError ? <div className="error-box admin-form-wide">{categoryError}</div> : null}
+
+            <div className="admin-form-actions admin-form-wide">
+              <button className="primary-btn" type="submit">
+                {editingCategoryId ? "Guardar cambios" : "Crear categoría"}
+              </button>
+              {editingCategoryId ? (
+                <button className="secondary-btn" type="button" onClick={resetCategoryForm}>
+                  Cancelar edición
+                </button>
+              ) : null}
+            </div>
+          </form>
+
+          {categoriesLoading ? (
+            <div className="empty-state">Cargando categorías...</div>
+          ) : (
+            <div className="admin-table-wrap">
+              <table className="admin-table">
+                <thead>
+                  <tr>
+                    <th>Nombre</th>
+                    <th>Color</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {categoryList.map((category) => (
+                    <tr key={category.id}>
+                      <td>{category.name}</td>
+                      <td>
+                        <span className="category-swatch" style={{ background: category.color || "#e2e8f0" }} />
+                        {category.color}
+                      </td>
+                      <td>
+                        <div className="admin-row-actions">
+                          <button className="secondary-btn" onClick={() => startEditCategory(category)}>
+                            Editar
+                          </button>
+                          <button className="secondary-btn danger" onClick={() => handleDeleteCategory(category)}>
                             Eliminar
                           </button>
                         </div>

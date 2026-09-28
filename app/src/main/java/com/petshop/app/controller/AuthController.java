@@ -70,6 +70,55 @@ public class AuthController {
         return ResponseEntity.status(401).body(Map.of("error","No autorizado"));
     }
 
+    @PutMapping("/me")
+    public ResponseEntity<?> updateMe(@RequestHeader(value = "X-Auth-Token", required = false) String token,
+                                       @RequestBody Map<String, String> body) {
+        if (token == null || !jwtUtil.isTokenValid(token)) {
+            return ResponseEntity.status(401).body(Map.of("error", "No autorizado"));
+        }
+
+        String name = body.get("name");
+        if (name == null || name.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "El nombre no puede estar vacío"));
+        }
+
+        User u = userRepository.findById(jwtUtil.extractUserId(token)).orElse(null);
+        if (u == null) {
+            return ResponseEntity.status(401).body(Map.of("error", "No autorizado"));
+        }
+
+        u.name = name.trim();
+        userRepository.save(u);
+        return ResponseEntity.ok(UserDTO.fromUser(u));
+    }
+
+    @PostMapping("/change-password")
+    public ResponseEntity<?> changePassword(@RequestHeader(value = "X-Auth-Token", required = false) String token,
+                                             @RequestBody Map<String, String> body) {
+        if (token == null || !jwtUtil.isTokenValid(token)) {
+            return ResponseEntity.status(401).body(Map.of("error", "No autorizado"));
+        }
+
+        String currentPassword = body.get("currentPassword");
+        String newPassword = body.get("newPassword");
+        if (currentPassword == null || newPassword == null || newPassword.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Faltan campos"));
+        }
+
+        User u = userRepository.findById(jwtUtil.extractUserId(token)).orElse(null);
+        if (u == null) {
+            return ResponseEntity.status(401).body(Map.of("error", "No autorizado"));
+        }
+
+        if (!passwordEncoder.matches(currentPassword, u.password)) {
+            return ResponseEntity.status(401).body(Map.of("error", "La contraseña actual no es correcta"));
+        }
+
+        u.password = passwordEncoder.encode(newPassword);
+        userRepository.save(u);
+        return ResponseEntity.ok(Map.of("ok", true));
+    }
+
     @PostMapping("/register")
     public ResponseEntity<?> register(@RequestBody Map<String,String> body) {
         String email = body.get("email");
