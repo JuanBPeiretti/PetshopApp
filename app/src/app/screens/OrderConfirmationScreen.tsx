@@ -25,6 +25,7 @@ export function OrderConfirmationScreen({ result, onNavigate }: Props) {
             <thead>
               <tr>
                 <th>Producto</th>
+                <th>Variante</th>
                 <th>Cantidad</th>
                 <th>Precio</th>
               </tr>
@@ -33,6 +34,7 @@ export function OrderConfirmationScreen({ result, onNavigate }: Props) {
               {result.items.map((item, idx) => (
                 <tr key={`${item.productId}-${idx}`}>
                   <td>{item.name}</td>
+                  <td>{item.variant || "—"}</td>
                   <td>{item.quantity}</td>
                   <td>{formatMoney(item.price)}</td>
                 </tr>
