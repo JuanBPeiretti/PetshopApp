@@ -2,13 +2,14 @@ import type { CheckoutResult, View } from "../types";
 
 type Props = {
   result: CheckoutResult;
+  isLoggedIn: boolean;
   onNavigate: (view: View) => void;
 };
 
 const formatMoney = (value: number) =>
   new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(value);
 
-export function OrderConfirmationScreen({ result, onNavigate }: Props) {
+export function OrderConfirmationScreen({ result, isLoggedIn, onNavigate }: Props) {
   return (
     <div className="page-shell confirmation-shell">
       <div className="confirmation-card">
@@ -59,7 +60,7 @@ export function OrderConfirmationScreen({ result, onNavigate }: Props) {
         </div>
 
         <div className="confirmation-actions">
-          {result.orderId != null ? (
+          {result.orderId != null && isLoggedIn ? (
             <button className="primary-btn" onClick={() => onNavigate("orders")}>Ver mis pedidos</button>
           ) : null}
           <button className="secondary-btn" onClick={() => onNavigate("products")}>Seguir comprando</button>

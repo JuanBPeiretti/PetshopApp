@@ -329,11 +329,13 @@ export async function requestReturn(
   productId: string,
   cantidad: number,
   motivo: string,
+  variantId?: number | null,
+  variant?: string | null,
 ): Promise<ReturnRecord> {
   return request<ReturnRecord>("/returns", {
     method: "POST",
     headers: { "X-Auth-Token": token },
-    body: JSON.stringify({ productId, cantidad, motivo }),
+    body: JSON.stringify({ productId, cantidad, motivo, variantId, variant }),
   });
 }
 
@@ -346,5 +348,12 @@ export async function updateReturnStatus(
     method: "PATCH",
     headers: { "X-Auth-Token": token },
     body: JSON.stringify({ estado }),
+  });
+}
+
+export async function processRefund(token: string, returnId: number): Promise<{ id: number; returnId: number; monto: number; estado: string }> {
+  return request(`/refunds/process/${returnId}`, {
+    method: "POST",
+    headers: { "X-Auth-Token": token },
   });
 }

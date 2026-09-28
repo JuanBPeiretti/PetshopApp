@@ -13,6 +13,7 @@ import {
   fetchOrderStats,
   fetchProducts,
   fetchProductVariants,
+  processRefund,
   updateCategory,
   updateOrderStatus,
   updateProduct,
@@ -399,7 +400,18 @@ export function AdminDashboardScreen({ authToken, categories }: Props) {
     }
   };
 
+  const handleProcessRefund = async (devolucion: ReturnRecord) => {
+    setActionError(null);
+    try {
+      await processRefund(authToken, devolucion.id);
+      await loadReturns();
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "No se pudo procesar el reembolso");
+    }
+  };
+
   const pendingReturns = returns.filter((r) => r.estado === "PENDIENTE");
+  const approvedReturns = returns.filter((r) => r.estado === "APROBADA");
 
   return (
     <div className="page-shell admin-shell">
@@ -421,7 +433,7 @@ export function AdminDashboardScreen({ authToken, categories }: Props) {
           Categorías
         </button>
         <button className={tab === "returns" ? "admin-tab active" : "admin-tab"} onClick={() => setTab("returns")}>
-          Devoluciones pendientes {pendingReturns.length > 0 ? `(${pendingReturns.length})` : ""}
+          Devoluciones {pendingReturns.length + approvedReturns.length > 0 ? `(${pendingReturns.length + approvedReturns.length})` : ""}
         </button>
       </div>
 
@@ -829,6 +841,7 @@ export function AdminDashboardScreen({ authToken, categories }: Props) {
 
       {tab === "returns" ? (
         <section className="admin-section">
+          <h3>Pendientes de revisión</h3>
           {returnsLoading ? (
             <div className="empty-state">Cargando devoluciones...</div>
           ) : pendingReturns.length === 0 ? (
@@ -841,6 +854,7 @@ export function AdminDashboardScreen({ authToken, categories }: Props) {
                     <th>ID</th>
                     <th>Usuario</th>
                     <th>Producto</th>
+                    <th>Variante</th>
                     <th>Cantidad</th>
                     <th>Motivo</th>
                     <th>Solicitada</th>
@@ -853,6 +867,7 @@ export function AdminDashboardScreen({ authToken, categories }: Props) {
                       <td>{devolucion.id}</td>
                       <td className="mono">{devolucion.userId}</td>
                       <td>{devolucion.productId}</td>
+                      <td>{devolucion.variant || "—"}</td>
                       <td>{devolucion.cantidad}</td>
                       <td>{devolucion.motivo}</td>
                       <td>{new Date(devolucion.requestedAt).toLocaleString("es-AR")}</td>
@@ -865,6 +880,46 @@ export function AdminDashboardScreen({ authToken, categories }: Props) {
                             Rechazar
                           </button>
                         </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <h3>Aprobadas — pendientes de reembolso</h3>
+          {returnsLoading ? (
+            <div className="empty-state">Cargando devoluciones...</div>
+          ) : approvedReturns.length === 0 ? (
+            <div className="empty-state">No hay devoluciones esperando reembolso.</div>
+          ) : (
+            <div className="admin-table-wrap">
+              <table className="admin-table">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Usuario</th>
+                    <th>Producto</th>
+                    <th>Variante</th>
+                    <th>Cantidad</th>
+                    <th>Solicitada</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {approvedReturns.map((devolucion) => (
+                    <tr key={devolucion.id}>
+                      <td>{devolucion.id}</td>
+                      <td className="mono">{devolucion.userId}</td>
+                      <td>{devolucion.productId}</td>
+                      <td>{devolucion.variant || "—"}</td>
+                      <td>{devolucion.cantidad}</td>
+                      <td>{new Date(devolucion.requestedAt).toLocaleString("es-AR")}</td>
+                      <td>
+                        <button className="secondary-btn" onClick={() => handleProcessRefund(devolucion)}>
+                          Procesar reembolso
+                        </button>
                       </td>
                     </tr>
                   ))}

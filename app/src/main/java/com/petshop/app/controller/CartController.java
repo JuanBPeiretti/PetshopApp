@@ -297,27 +297,30 @@ public class CartController {
         double total = subtotal + shippingCost;
         Long orderId = null;
 
-        if (guest) {
-            store.carts.remove(userToken);
-        } else {
-            if (!purchasedItems.isEmpty()) {
-                List<Order.OrderItem> orderItems = purchasedItems.stream()
-                        .map(i -> new Order.OrderItem(i.productId, i.quantity, i.price, i.variant))
-                        .toList();
-                Order order = new Order(userToken, Instant.now(), orderItems, total, "COMPLETADA");
-                order.subtotal = subtotal;
-                order.shippingCost = shippingCost;
-                order.shippingName = shippingName;
-                order.shippingAddress = shippingAddress;
-                order.shippingCity = shippingCity;
-                order.shippingPostalCode = shippingPostalCode;
-                order.shippingPhone = shippingPhone;
-                orderRepository.save(order);
-                orderId = order.id;
+        if (!purchasedItems.isEmpty()) {
+            List<Order.OrderItem> orderItems = purchasedItems.stream()
+                    .map(i -> new Order.OrderItem(i.productId, i.quantity, i.price, i.variant, i.variantId))
+                    .toList();
+            Order order = new Order(userToken, Instant.now(), orderItems, total, "COMPLETADA");
+            order.subtotal = subtotal;
+            order.shippingCost = shippingCost;
+            order.shippingName = shippingName;
+            order.shippingAddress = shippingAddress;
+            order.shippingCity = shippingCity;
+            order.shippingPostalCode = shippingPostalCode;
+            order.shippingPhone = shippingPhone;
+            orderRepository.save(order);
+            orderId = order.id;
 
+            if (!guest) {
                 String email = jwtUtil.extractEmail(token);
                 notificationService.notify(email, "Tu compra de " + purchasedItems.size() + " producto(s) se realizó con éxito.");
             }
+        }
+
+        if (guest) {
+            store.carts.remove(userToken);
+        } else {
             cartItemRepository.deleteAll(purchasedItems);
         }
 

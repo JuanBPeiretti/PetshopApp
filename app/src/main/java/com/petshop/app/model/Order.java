@@ -57,6 +57,7 @@ public class Order {
         public int quantity;
         public double price;
         public String variant;
+        public Long variantId;
 
         public OrderItem() {}
 
@@ -66,11 +67,12 @@ public class Order {
             this.price = price;
         }
 
-        public OrderItem(String productId, int quantity, double price, String variant) {
+        public OrderItem(String productId, int quantity, double price, String variant, Long variantId) {
             this.productId = productId;
             this.quantity = quantity;
             this.price = price;
             this.variant = variant;
+            this.variantId = variantId;
         }
     }
 }

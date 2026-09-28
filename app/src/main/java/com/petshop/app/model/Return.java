@@ -22,6 +22,8 @@ public class Return {
 
     public String userId;
     public String productId;
+    public Long variantId;
+    public String variant;
     public int cantidad;
     public String motivo;
 

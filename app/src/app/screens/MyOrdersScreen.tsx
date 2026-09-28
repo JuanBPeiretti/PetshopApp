@@ -16,6 +16,8 @@ type ReturnTarget = {
   productId: string;
   productName: string;
   maxQty: number;
+  variantId?: number | null;
+  variant?: string | null;
 };
 
 export function MyOrdersScreen({ authToken }: Props) {
@@ -90,7 +92,14 @@ export function MyOrdersScreen({ authToken }: Props) {
 
     setReturnSubmitting(true);
     try {
-      await requestReturn(authToken, returnTarget.productId, cantidad, returnMotivo.trim());
+      await requestReturn(
+        authToken,
+        returnTarget.productId,
+        cantidad,
+        returnMotivo.trim(),
+        returnTarget.variantId,
+        returnTarget.variant,
+      );
       setReturnTarget(null);
       setTab("returns");
       await loadReturns();
@@ -164,6 +173,8 @@ export function MyOrdersScreen({ authToken }: Props) {
                                     productId: item.productId,
                                     productName: item.productId,
                                     maxQty: item.quantity,
+                                    variantId: item.variantId,
+                                    variant: item.variant,
                                   })
                                 }
                               >
@@ -179,7 +190,8 @@ export function MyOrdersScreen({ authToken }: Props) {
                   {returnTarget && returnTarget.orderId === order.id ? (
                     <form className="return-form" onSubmit={submitReturn}>
                       <p>
-                        Devolver <strong>{returnTarget.productId}</strong> del pedido #{order.id}
+                        Devolver <strong>{returnTarget.productId}</strong>
+                        {returnTarget.variant ? ` (${returnTarget.variant})` : ""} del pedido #{order.id}
                       </p>
                       <label>
                         <span>Cantidad (máx {returnTarget.maxQty})</span>
@@ -225,6 +237,7 @@ export function MyOrdersScreen({ authToken }: Props) {
                 <thead>
                   <tr>
                     <th>Producto</th>
+                    <th>Variante</th>
                     <th>Cantidad</th>
                     <th>Motivo</th>
                     <th>Solicitada</th>
@@ -235,6 +248,7 @@ export function MyOrdersScreen({ authToken }: Props) {
                   {returns.map((r) => (
                     <tr key={r.id}>
                       <td>{r.productId}</td>
+                      <td>{r.variant || "—"}</td>
                       <td>{r.cantidad}</td>
                       <td>{r.motivo}</td>
                       <td>{new Date(r.requestedAt).toLocaleString("es-AR")}</td>

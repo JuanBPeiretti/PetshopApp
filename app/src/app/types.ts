@@ -50,6 +50,7 @@ export type OrderItem = {
   quantity: number;
   price: number;
   variant?: string | null;
+  variantId?: number | null;
 };
 
 export type OrderRecord = {
@@ -78,6 +79,8 @@ export type ReturnRecord = {
   id: number;
   userId: string;
   productId: string;
+  variantId?: number | null;
+  variant?: string | null;
   cantidad: number;
   motivo: string;
   estado: "PENDIENTE" | "APROBADA" | "RECHAZADA" | "PROCESADO";

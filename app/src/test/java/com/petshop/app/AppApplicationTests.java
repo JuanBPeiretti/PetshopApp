@@ -237,7 +237,10 @@ class AppApplicationTests {
 
         cartController.checkout(null, "device-1", null);
         verifyNoInteractions(notificationService);
-        verifyNoInteractions(orderRepository);
+
+        assertThat(savedOrders).hasSize(1);
+        assertThat(savedOrders.get(0).userId).isEqualTo("guest:device-1");
+        assertThat(savedOrders.get(0).estado).isEqualTo("COMPLETADA");
     }
 
     @Test

@@ -303,7 +303,7 @@ function App() {
     }
 
     if (view === "confirmation" && lastCheckout) {
-      return <OrderConfirmationScreen result={lastCheckout} onNavigate={navigateTo} />;
+      return <OrderConfirmationScreen result={lastCheckout} isLoggedIn={!!currentUser} onNavigate={navigateTo} />;
     }
 
     if (view === "terms" || view === "privacy" || view === "contact") {

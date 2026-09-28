@@ -1,7 +1,10 @@
 package com.petshop.app.controller;
 
+import com.petshop.app.model.Product;
+import com.petshop.app.model.ProductVariant;
 import com.petshop.app.model.Return;
 import com.petshop.app.repository.ProductRepository;
+import com.petshop.app.repository.ProductVariantRepository;
 import com.petshop.app.repository.ReturnRepository;
 import com.petshop.app.service.AdminGuard;
 import com.petshop.app.service.JwtUtil;
@@ -18,13 +21,15 @@ public class ReturnController {
 
     private final ReturnRepository returnRepository;
     private final ProductRepository productRepository;
+    private final ProductVariantRepository variantRepository;
     private final JwtUtil jwtUtil;
     private final AdminGuard adminGuard;
 
     public ReturnController(ReturnRepository returnRepository, ProductRepository productRepository,
-                             JwtUtil jwtUtil, AdminGuard adminGuard) {
+                             ProductVariantRepository variantRepository, JwtUtil jwtUtil, AdminGuard adminGuard) {
         this.returnRepository = returnRepository;
         this.productRepository = productRepository;
+        this.variantRepository = variantRepository;
         this.jwtUtil = jwtUtil;
         this.adminGuard = adminGuard;
     }
@@ -51,10 +56,16 @@ public class ReturnController {
         }
         int cantidad = ((Number) cantidadValue).intValue();
 
+        Object variantIdValue = body.get("variantId");
+        Long variantId = variantIdValue instanceof Number ? ((Number) variantIdValue).longValue() : null;
+        String variant = body.get("variant") != null ? body.get("variant").toString() : null;
+
         String motivo = body.get("motivo") != null ? body.get("motivo").toString() : "";
         String userId = jwtUtil.extractUserId(token);
 
         Return devolucion = new Return(userId, productId, cantidad, motivo, Return.Status.PENDIENTE, Instant.now());
+        devolucion.variantId = variantId;
+        devolucion.variant = variant;
         returnRepository.save(devolucion);
         return ResponseEntity.ok(devolucion);
     }
@@ -101,7 +112,29 @@ public class ReturnController {
         }
 
         devolucion.estado = Return.Status.valueOf(nuevoEstado);
+
+        if (devolucion.estado == Return.Status.APROBADA) {
+            restockReturnedItem(devolucion);
+        }
+
         returnRepository.save(devolucion);
         return ResponseEntity.ok(devolucion);
+    }
+
+    private void restockReturnedItem(Return devolucion) {
+        Product product = productRepository.findById(devolucion.productId).orElse(null);
+        if (product == null) {
+            return;
+        }
+        product.stock += devolucion.cantidad;
+        productRepository.save(product);
+
+        if (devolucion.variantId != null) {
+            ProductVariant variant = variantRepository.findById(devolucion.variantId).orElse(null);
+            if (variant != null) {
+                variant.stock += devolucion.cantidad;
+                variantRepository.save(variant);
+            }
+        }
     }
 }
