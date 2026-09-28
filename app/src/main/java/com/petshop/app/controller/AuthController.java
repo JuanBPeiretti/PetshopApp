@@ -56,6 +56,10 @@ public class AuthController {
         }
 
         User u = userRepository.findByEmail(email).orElse(null);
+        if (u != null && !u.active) {
+            return ResponseEntity.status(403).body(Map.of("error", "Tu cuenta fue deshabilitada. Contactá a soporte."));
+        }
+
         if (u != null && passwordEncoder.matches(password, u.password)) {
             loginRateLimiter.recordSuccess(email);
             String token = jwtUtil.generateToken(u.id, u.email, u.role);

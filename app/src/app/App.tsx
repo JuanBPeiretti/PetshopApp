@@ -315,7 +315,7 @@ function App() {
     }
 
     if (view === "admin" && currentUser?.role === "ADMIN" && authToken) {
-      return <AdminDashboardScreen authToken={authToken} categories={categories} />;
+      return <AdminDashboardScreen authToken={authToken} categories={categories} currentUserId={currentUser.id} />;
     }
 
     if (view === "orders" && currentUser && authToken) {

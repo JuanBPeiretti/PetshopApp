@@ -7,17 +7,19 @@ public class UserDTO {
     public String email;
     public String name;
     public String role;
+    public boolean active;
 
     public UserDTO() {}
 
-    public UserDTO(String id, String email, String name, String role) {
+    public UserDTO(String id, String email, String name, String role, boolean active) {
         this.id = id;
         this.email = email;
         this.name = name;
         this.role = role;
+        this.active = active;
     }
 
     public static UserDTO fromUser(User user) {
-        return new UserDTO(user.id, user.email, user.name, user.role);
+        return new UserDTO(user.id, user.email, user.name, user.role, user.active);
     }
 }

@@ -252,6 +252,28 @@ export async function checkoutCart(token: string | null, shipping?: Partial<Ship
   });
 }
 
+export async function fetchAllUsers(token: string): Promise<User[]> {
+  return request<User[]>("/users", {
+    headers: { "X-Auth-Token": token },
+  });
+}
+
+export async function updateUserRole(token: string, userId: string, role: "ADMIN" | "CUSTOMER"): Promise<User> {
+  return request<User>(`/users/${userId}/role`, {
+    method: "PATCH",
+    headers: { "X-Auth-Token": token },
+    body: JSON.stringify({ role }),
+  });
+}
+
+export async function updateUserStatus(token: string, userId: string, active: boolean): Promise<User> {
+  return request<User>(`/users/${userId}/status`, {
+    method: "PATCH",
+    headers: { "X-Auth-Token": token },
+    body: JSON.stringify({ active }),
+  });
+}
+
 export async function fetchAllOrders(token: string): Promise<OrderRecord[]> {
   return request<OrderRecord[]>("/orders", {
     headers: { "X-Auth-Token": token },

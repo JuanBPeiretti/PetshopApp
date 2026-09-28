@@ -43,6 +43,7 @@ export type User = {
   name: string;
   password?: string;
   role?: "CUSTOMER" | "ADMIN";
+  active?: boolean;
 };
 
 export type OrderItem = {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { Category, OrderRecord, OrderStats, Product, ProductVariant, ReturnRecord } from "../types";
+import type { Category, OrderRecord, OrderStats, Product, ProductVariant, ReturnRecord, User } from "../types";
 import {
   createCategory,
   createProduct,
@@ -9,6 +9,7 @@ import {
   deleteProductVariant,
   fetchAllOrders,
   fetchAllReturns,
+  fetchAllUsers,
   fetchCategories,
   fetchOrderStats,
   fetchProducts,
@@ -19,15 +20,18 @@ import {
   updateProduct,
   updateProductVariant,
   updateReturnStatus,
+  updateUserRole,
+  updateUserStatus,
   uploadImage,
 } from "../api";
 
 type Props = {
   authToken: string;
   categories: Category[];
+  currentUserId: string;
 };
 
-type Tab = "stats" | "orders" | "products" | "categories" | "returns";
+type Tab = "stats" | "orders" | "products" | "categories" | "returns" | "users";
 
 const EMPTY_CATEGORY_FORM = { id: "", name: "", color: "#f97316" };
 
@@ -51,8 +55,11 @@ const EMPTY_PRODUCT_FORM = {
   tipoPromocion: "",
 };
 
-export function AdminDashboardScreen({ authToken, categories }: Props) {
+export function AdminDashboardScreen({ authToken, categories, currentUserId }: Props) {
   const [tab, setTab] = useState<Tab>("stats");
+
+  const [users, setUsers] = useState<User[]>([]);
+  const [usersLoading, setUsersLoading] = useState(false);
 
   const [stats, setStats] = useState<OrderStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
@@ -144,12 +151,44 @@ export function AdminDashboardScreen({ authToken, categories }: Props) {
     }
   };
 
+  const loadUsers = async () => {
+    setUsersLoading(true);
+    try {
+      setUsers(await fetchAllUsers(authToken));
+    } catch (error) {
+      console.error("No se pudieron cargar los usuarios", error);
+    } finally {
+      setUsersLoading(false);
+    }
+  };
+
+  const handleUserRoleChange = async (user: User, role: "ADMIN" | "CUSTOMER") => {
+    setActionError(null);
+    try {
+      const updated = await updateUserRole(authToken, user.id, role);
+      setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "No se pudo cambiar el rol del usuario");
+    }
+  };
+
+  const handleUserStatusChange = async (user: User, active: boolean) => {
+    setActionError(null);
+    try {
+      const updated = await updateUserStatus(authToken, user.id, active);
+      setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "No se pudo cambiar el estado del usuario");
+    }
+  };
+
   useEffect(() => {
     void loadStats();
     void loadOrders();
     void loadProducts();
     void loadReturns();
     void loadCategories();
+    void loadUsers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -434,6 +473,9 @@ export function AdminDashboardScreen({ authToken, categories }: Props) {
         </button>
         <button className={tab === "returns" ? "admin-tab active" : "admin-tab"} onClick={() => setTab("returns")}>
           Devoluciones {pendingReturns.length + approvedReturns.length > 0 ? `(${pendingReturns.length + approvedReturns.length})` : ""}
+        </button>
+        <button className={tab === "users" ? "admin-tab active" : "admin-tab"} onClick={() => setTab("users")}>
+          Usuarios
         </button>
       </div>
 
@@ -923,6 +965,67 @@ export function AdminDashboardScreen({ authToken, categories }: Props) {
                       </td>
                     </tr>
                   ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      ) : null}
+
+      {tab === "users" ? (
+        <section className="admin-section">
+          {usersLoading ? (
+            <div className="empty-state">Cargando usuarios...</div>
+          ) : users.length === 0 ? (
+            <div className="empty-state">No hay usuarios registrados.</div>
+          ) : (
+            <div className="admin-table-wrap">
+              <table className="admin-table">
+                <thead>
+                  <tr>
+                    <th>Nombre</th>
+                    <th>Email</th>
+                    <th>Rol</th>
+                    <th>Estado</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {users.map((user) => {
+                    const isSelf = user.id === currentUserId;
+                    return (
+                      <tr key={user.id}>
+                        <td>{user.name}</td>
+                        <td>{user.email}</td>
+                        <td>{user.role}</td>
+                        <td>
+                          <span className="status-badge">{user.active === false ? "Deshabilitado" : "Activo"}</span>
+                        </td>
+                        <td>
+                          <div className="admin-row-actions">
+                            {isSelf ? (
+                              <span className="review-login-hint">Tu cuenta</span>
+                            ) : (
+                              <>
+                                <button
+                                  className="secondary-btn"
+                                  onClick={() => handleUserRoleChange(user, user.role === "ADMIN" ? "CUSTOMER" : "ADMIN")}
+                                >
+                                  {user.role === "ADMIN" ? "Quitar admin" : "Hacer admin"}
+                                </button>
+                                <button
+                                  className="secondary-btn danger"
+                                  onClick={() => handleUserStatusChange(user, user.active === false)}
+                                >
+                                  {user.active === false ? "Habilitar" : "Deshabilitar"}
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
