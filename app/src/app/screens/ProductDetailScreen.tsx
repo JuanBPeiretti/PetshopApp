@@ -6,6 +6,8 @@ type Props = {
   product: Product | null;
   authToken: string | null;
   isAdmin: boolean;
+  wishlist: string[];
+  onToggleWishlist: (productId: string) => void;
   onBack: () => void;
   onAddToCart: (product: Product, variant?: ProductVariant) => void;
 };
@@ -16,7 +18,15 @@ const formatMoney = (value: number) =>
 const variantLabel = (variant: ProductVariant) =>
   [variant.talle ? `Talle ${variant.talle}` : null, variant.color].filter(Boolean).join(" / ");
 
-export function ProductDetailScreen({ product, authToken, isAdmin, onBack, onAddToCart }: Props) {
+export function ProductDetailScreen({
+  product,
+  authToken,
+  isAdmin,
+  wishlist,
+  onToggleWishlist,
+  onBack,
+  onAddToCart,
+}: Props) {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(false);
   const [rating, setRating] = useState(5);
@@ -60,6 +70,9 @@ export function ProductDetailScreen({ product, authToken, isAdmin, onBack, onAdd
 
   const averageRating = reviews.length > 0 ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length : null;
 
+  const selectedVariant = variants.find((v) => v.id === selectedVariantId);
+  const displayImageUrl = selectedVariant?.imageUrl || product.imageUrl;
+
   const handleSubmitReview = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!authToken) return;
@@ -99,10 +112,19 @@ export function ProductDetailScreen({ product, authToken, isAdmin, onBack, onAdd
       <div className="product-detail">
         <div className="product-detail-image">
           <img
-            src={product.imageUrl || "https://images.unsplash.com/photo-1583337130417-3346a1be7dee?auto=format&fit=crop&w=900&q=80"}
+            src={displayImageUrl || "https://images.unsplash.com/photo-1583337130417-3346a1be7dee?auto=format&fit=crop&w=900&q=80"}
             alt={product.name}
           />
           {product.badge ? <span className="product-badge">{product.badge}</span> : null}
+          {!isAdmin ? (
+            <button
+              className={wishlist.includes(product.id) ? "wishlist-heart active" : "wishlist-heart"}
+              onClick={() => onToggleWishlist(product.id)}
+              aria-label={wishlist.includes(product.id) ? "Quitar de favoritos" : "Agregar a favoritos"}
+            >
+              ♥
+            </button>
+          ) : null}
         </div>
 
         <div className="product-detail-info">
@@ -168,10 +190,7 @@ export function ProductDetailScreen({ product, authToken, isAdmin, onBack, onAdd
               <div className="product-detail-actions">
                 <button
                   className="primary-btn"
-                  onClick={() => {
-                    const selectedVariant = variants.find((v) => v.id === selectedVariantId);
-                    onAddToCart(product, selectedVariant);
-                  }}
+                  onClick={() => onAddToCart(product, selectedVariant)}
                   disabled={
                     product.stock <= 0 ||
                     (product.hasVariants && (variants.length === 0 || selectedVariantId == null))

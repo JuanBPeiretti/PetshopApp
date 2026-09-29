@@ -26,6 +26,7 @@ export type ProductVariant = {
   talle?: string | null;
   color?: string | null;
   stock: number;
+  imageUrl?: string | null;
 };
 
 export type CartItem = {
@@ -141,6 +142,7 @@ export type View =
   | "login"
   | "admin"
   | "orders"
+  | "wishlist"
   | "account"
   | "confirmation"
   | "terms"

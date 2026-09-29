@@ -10,8 +10,10 @@ import { MyOrdersScreen } from "./screens/MyOrdersScreen";
 import { MyAccountScreen } from "./screens/MyAccountScreen";
 import { OrderConfirmationScreen } from "./screens/OrderConfirmationScreen";
 import { LegalScreen } from "./screens/LegalScreen";
+import { WishlistScreen } from "./screens/WishlistScreen";
 import {
   addToCart,
+  addToWishlist,
   AUTH_TOKEN_KEY,
   AUTH_USER_KEY,
   checkoutCart,
@@ -20,12 +22,14 @@ import {
   fetchCategories,
   fetchCurrentUser,
   fetchProducts,
+  fetchWishlist,
   getAuthToken,
   getCurrentUser,
   incrementCartItem,
   login,
   register,
   removeFromCart,
+  removeFromWishlist,
   UNAUTHORIZED_EVENT,
 } from "./api";
 import type { CartItem, CheckoutResult, Category, Product, ProductVariant, ShippingInfo, User, View } from "./types";
@@ -47,6 +51,7 @@ function App() {
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [theme, setTheme] = useState<"light" | "soft" | "dark">("soft");
   const [lastCheckout, setLastCheckout] = useState<CheckoutResult | null>(null);
+  const [wishlist, setWishlist] = useState<string[]>([]);
 
   const cartCount = useMemo(
     () => cartItems.reduce((total, item) => total + item.quantity, 0),
@@ -88,6 +93,18 @@ function App() {
     }
   };
 
+  const loadWishlist = async (token: string | null) => {
+    if (!token) {
+      setWishlist([]);
+      return;
+    }
+    try {
+      setWishlist(await fetchWishlist(token));
+    } catch (error) {
+      console.error("No se pudo cargar la lista de favoritos", error);
+    }
+  };
+
   useEffect(() => {
     const token = getAuthToken();
     const user = getCurrentUser();
@@ -95,6 +112,9 @@ function App() {
       setAuthToken(token);
       setCurrentUser(user);
       void loadCart(token);
+      if (user?.role !== "ADMIN") {
+        void loadWishlist(token);
+      }
     }
     void loadCategories();
     void loadProducts();
@@ -139,6 +159,9 @@ function App() {
       setCurrentUser(response.user);
       setView("home");
       await loadCart(response.token);
+      if (response.user.role !== "ADMIN") {
+        await loadWishlist(response.token);
+      }
     } catch (error) {
       setAuthError(error instanceof Error ? error.message : "Error de autenticación");
     } finally {
@@ -157,6 +180,7 @@ function App() {
     setAuthToken(null);
     setCurrentUser(null);
     setSelectedProductId(null);
+    setWishlist([]);
     setView("home");
   };
 
@@ -198,6 +222,24 @@ function App() {
     } catch (error) {
       console.error("Error agregando al carrito", error);
       alert(error instanceof Error ? error.message : "No se pudo agregar el producto al carrito.");
+    }
+  };
+
+  const handleToggleWishlist = async (productId: string) => {
+    if (currentUser?.role === "ADMIN") {
+      return;
+    }
+    if (!authToken) {
+      alert("Iniciá sesión para guardar productos en favoritos.");
+      return;
+    }
+    try {
+      const updated = wishlist.includes(productId)
+        ? await removeFromWishlist(authToken, productId)
+        : await addToWishlist(authToken, productId);
+      setWishlist(updated);
+    } catch (error) {
+      console.error("Error actualizando favoritos", error);
     }
   };
 
@@ -270,6 +312,8 @@ function App() {
           product={selectedProduct}
           authToken={authToken}
           isAdmin={currentUser?.role === "ADMIN"}
+          wishlist={wishlist}
+          onToggleWishlist={handleToggleWishlist}
           onBack={handleProductDetailBack}
           onAddToCart={handleAddToCart}
         />
@@ -290,6 +334,8 @@ function App() {
           onAddToCart={handleAddToCart}
           onOpenProduct={openProduct}
           isAdmin={currentUser?.role === "ADMIN"}
+          wishlist={wishlist}
+          onToggleWishlist={handleToggleWishlist}
         />
       );
     }
@@ -322,6 +368,8 @@ function App() {
           onAddToCart={handleAddToCart}
           onOpenProduct={openProduct}
           isAdmin={currentUser?.role === "ADMIN"}
+          wishlist={wishlist}
+          onToggleWishlist={handleToggleWishlist}
         />
       );
     }
@@ -332,6 +380,18 @@ function App() {
 
     if (view === "orders" && currentUser && authToken) {
       return <MyOrdersScreen authToken={authToken} />;
+    }
+
+    if (view === "wishlist" && currentUser && currentUser.role !== "ADMIN") {
+      return (
+        <WishlistScreen
+          products={products}
+          wishlist={wishlist}
+          onAddToCart={handleAddToCart}
+          onOpenProduct={openProduct}
+          onToggleWishlist={handleToggleWishlist}
+        />
+      );
     }
 
     if (view === "account" && currentUser && authToken) {
@@ -355,6 +415,8 @@ function App() {
         onNavigate={navigateTo}
         onAddToCart={handleAddToCart}
         onOpenProduct={openProduct}
+        wishlist={wishlist}
+        onToggleWishlist={handleToggleWishlist}
       />
     );
   };
@@ -390,6 +452,9 @@ function App() {
             <button onClick={() => navigateTo("offers")}>Ofertas</button>
             {currentUser?.role !== "ADMIN" ? (
               <button onClick={() => navigateTo("cart")}>Carrito ({cartCount})</button>
+            ) : null}
+            {currentUser && currentUser.role !== "ADMIN" ? (
+              <button onClick={() => navigateTo("wishlist")}>Favoritos {wishlist.length > 0 ? `(${wishlist.length})` : ""}</button>
             ) : null}
             {currentUser ? (
               <button onClick={() => navigateTo("orders")}>Mis pedidos</button>

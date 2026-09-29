@@ -6,25 +6,24 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
+import java.time.Instant;
+
 @Entity
-@Table(name = "product_variants")
-public class ProductVariant {
+@Table(name = "wishlist_items")
+public class WishlistItem {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     public Long id;
 
+    public String userId;
     public String productId;
-    public String talle;
-    public String color;
-    public int stock;
-    public String imageUrl;
+    public Instant addedAt;
 
-    public ProductVariant() {}
+    public WishlistItem() {}
 
-    public ProductVariant(String productId, String talle, String color, int stock) {
+    public WishlistItem(String userId, String productId, Instant addedAt) {
+        this.userId = userId;
         this.productId = productId;
-        this.talle = talle;
-        this.color = color;
-        this.stock = stock;
+        this.addedAt = addedAt;
     }
 }

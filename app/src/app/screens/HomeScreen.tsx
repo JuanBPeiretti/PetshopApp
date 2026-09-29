@@ -7,12 +7,23 @@ type Props = {
   onNavigate: (view: "home" | "products" | "offers" | "categories" | "cart" | "login") => void;
   onAddToCart: (product: Product) => void;
   onOpenProduct: (id: string) => void;
+  wishlist: string[];
+  onToggleWishlist: (productId: string) => void;
 };
 
 const formatMoney = (value: number) =>
   new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(value);
 
-export function HomeScreen({ categories, products, currentUser, onNavigate, onAddToCart, onOpenProduct }: Props) {
+export function HomeScreen({
+  categories,
+  products,
+  currentUser,
+  onNavigate,
+  onAddToCart,
+  onOpenProduct,
+  wishlist,
+  onToggleWishlist,
+}: Props) {
   const featured = products.slice(0, 4);
 
   return (
@@ -86,6 +97,18 @@ export function HomeScreen({ categories, products, currentUser, onNavigate, onAd
               <div className="product-image-wrap product-clickable" onClick={() => onOpenProduct(product.id)}>
                 <img src={product.imageUrl || "https://images.unsplash.com/photo-1583337130417-3346a1be7dee?auto=format&fit=crop&w=700&q=80"} alt={product.name} />
                 {product.badge && <span className="product-badge">{product.badge}</span>}
+                {currentUser?.role !== "ADMIN" ? (
+                  <button
+                    className={wishlist.includes(product.id) ? "wishlist-heart active" : "wishlist-heart"}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onToggleWishlist(product.id);
+                    }}
+                    aria-label={wishlist.includes(product.id) ? "Quitar de favoritos" : "Agregar a favoritos"}
+                  >
+                    ♥
+                  </button>
+                ) : null}
               </div>
               <div className="product-body">
                 <span className="brand">{product.brand}</span>

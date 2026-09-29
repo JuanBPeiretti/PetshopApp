@@ -76,6 +76,7 @@ public class ProductVariantController {
         existing.talle = variant.talle;
         existing.color = variant.color;
         existing.stock = variant.stock;
+        existing.imageUrl = variant.imageUrl;
         variantRepository.save(existing);
         recomputeProductStock(productId);
         return ResponseEntity.ok(existing);

@@ -153,6 +153,27 @@ export async function deleteReview(token: string, productId: string, reviewId: n
   });
 }
 
+export async function fetchWishlist(token: string): Promise<string[]> {
+  return request<string[]>("/wishlist", {
+    headers: { "X-Auth-Token": token },
+  });
+}
+
+export async function addToWishlist(token: string, productId: string): Promise<string[]> {
+  return request<string[]>("/wishlist", {
+    method: "POST",
+    headers: { "X-Auth-Token": token },
+    body: JSON.stringify({ productId }),
+  });
+}
+
+export async function removeFromWishlist(token: string, productId: string): Promise<string[]> {
+  return request<string[]>(`/wishlist/${productId}`, {
+    method: "DELETE",
+    headers: { "X-Auth-Token": token },
+  });
+}
+
 export async function login(email: string, password: string): Promise<{ token: string; user: User }> {
   return request<{ token: string; user: User }>("/auth/login", {
     method: "POST",

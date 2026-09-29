@@ -15,6 +15,8 @@ type Props = {
   onAddToCart: (product: Product) => void;
   onOpenProduct: (id: string) => void;
   isAdmin: boolean;
+  wishlist: string[];
+  onToggleWishlist: (productId: string) => void;
 };
 
 const formatMoney = (value: number) =>
@@ -32,6 +34,8 @@ export function ProductsScreen({
   onAddToCart,
   onOpenProduct,
   isAdmin,
+  wishlist,
+  onToggleWishlist,
 }: Props) {
   const [page, setPage] = useState(1);
 
@@ -93,6 +97,18 @@ export function ProductsScreen({
                   alt={product.name}
                 />
                 {product.badge ? <span className="product-badge">{product.badge}</span> : null}
+                {!isAdmin ? (
+                  <button
+                    className={wishlist.includes(product.id) ? "wishlist-heart active" : "wishlist-heart"}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onToggleWishlist(product.id);
+                    }}
+                    aria-label={wishlist.includes(product.id) ? "Quitar de favoritos" : "Agregar a favoritos"}
+                  >
+                    ♥
+                  </button>
+                ) : null}
               </div>
               <div className="product-body">
                 <span className="brand">{product.brand}</span>

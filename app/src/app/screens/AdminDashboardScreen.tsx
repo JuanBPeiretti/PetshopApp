@@ -63,7 +63,7 @@ const EMPTY_COUPON_FORM = {
 const formatMoney = (value: number) =>
   new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(value);
 
-const EMPTY_VARIANT_FORM = { talle: "", color: "", stock: "" };
+const EMPTY_VARIANT_FORM = { talle: "", color: "", stock: "", imageUrl: "" };
 
 const EMPTY_PRODUCT_FORM = {
   id: "",
@@ -99,6 +99,7 @@ export function AdminDashboardScreen({ authToken, categories, currentUserId }: P
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [productError, setProductError] = useState<string | null>(null);
   const [imageUploading, setImageUploading] = useState(false);
+  const [variantImageUploading, setVariantImageUploading] = useState(false);
 
   const [variantList, setVariantList] = useState<ProductVariant[]>([]);
   const [variantsLoading, setVariantsLoading] = useState(false);
@@ -472,6 +473,7 @@ export function AdminDashboardScreen({ authToken, categories, currentUserId }: P
       talle: variant.talle || "",
       color: variant.color || "",
       stock: String(variant.stock),
+      imageUrl: variant.imageUrl || "",
     });
     setVariantError(null);
   };
@@ -490,6 +492,7 @@ export function AdminDashboardScreen({ authToken, categories, currentUserId }: P
       talle: variantForm.talle.trim() || null,
       color: variantForm.color.trim() || null,
       stock: variantForm.stock ? Number(variantForm.stock) : 0,
+      imageUrl: variantForm.imageUrl.trim() || null,
     };
 
     try {
@@ -584,6 +587,23 @@ export function AdminDashboardScreen({ authToken, categories, currentUserId }: P
       setProductError(error instanceof Error ? error.message : "No se pudo subir la imagen");
     } finally {
       setImageUploading(false);
+      e.target.value = "";
+    }
+  };
+
+  const handleVariantImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setVariantError(null);
+    setVariantImageUploading(true);
+    try {
+      const url = await uploadImage(authToken, file);
+      setVariantForm((prev) => ({ ...prev, imageUrl: url }));
+    } catch (error) {
+      setVariantError(error instanceof Error ? error.message : "No se pudo subir la imagen");
+    } finally {
+      setVariantImageUploading(false);
       e.target.value = "";
     }
   };
@@ -1002,6 +1022,21 @@ export function AdminDashboardScreen({ authToken, categories, currentUserId }: P
                   <span>Stock</span>
                   <input type="number" value={variantForm.stock} onChange={(e) => setVariantForm({ ...variantForm, stock: e.target.value })} />
                 </label>
+                <label className="admin-form-wide">
+                  <span>URL de imagen (opcional, si no usa la del producto)</span>
+                  <input value={variantForm.imageUrl} onChange={(e) => setVariantForm({ ...variantForm, imageUrl: e.target.value })} />
+                </label>
+                <label className="admin-form-wide">
+                  <span>Subir imagen de la variante</span>
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/gif,image/webp"
+                    onChange={handleVariantImageUpload}
+                    disabled={variantImageUploading}
+                  />
+                  {variantImageUploading ? <span className="upload-status">Subiendo...</span> : null}
+                  {variantForm.imageUrl ? <img src={variantForm.imageUrl} alt="Vista previa" className="image-preview" /> : null}
+                </label>
 
                 {variantError ? <div className="error-box admin-form-wide">{variantError}</div> : null}
 
@@ -1026,6 +1061,7 @@ export function AdminDashboardScreen({ authToken, categories, currentUserId }: P
                   <table className="admin-table">
                     <thead>
                       <tr>
+                        <th>Foto</th>
                         <th>Talle</th>
                         <th>Color</th>
                         <th>Stock</th>
@@ -1035,6 +1071,13 @@ export function AdminDashboardScreen({ authToken, categories, currentUserId }: P
                     <tbody>
                       {variantList.map((variant) => (
                         <tr key={variant.id}>
+                          <td>
+                            {variant.imageUrl ? (
+                              <img src={variant.imageUrl} alt="" className="variant-thumb" />
+                            ) : (
+                              "—"
+                            )}
+                          </td>
                           <td>{variant.talle || "—"}</td>
                           <td>{variant.color || "—"}</td>
                           <td>{variant.stock}</td>
