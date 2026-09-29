@@ -32,6 +32,8 @@ public class Order {
 
     public double subtotal;
     public double shippingCost;
+    public double discountAmount;
+    public String couponCode;
     public double total;
     public String estado;
 

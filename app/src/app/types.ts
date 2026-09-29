@@ -59,6 +59,10 @@ export type OrderRecord = {
   userId: string;
   fecha: string;
   items: OrderItem[];
+  subtotal?: number;
+  shippingCost?: number;
+  discountAmount?: number;
+  couponCode?: string | null;
   total: number;
   estado: string;
 };
@@ -110,8 +114,22 @@ export type CheckoutResult = {
   items: CartItem[];
   subtotal: number;
   shippingCost: number;
+  discountAmount: number;
+  couponCode: string | null;
   total: number;
   orderId: number | null;
+};
+
+export type Coupon = {
+  id: number;
+  code: string;
+  discountType: "PERCENTAGE" | "FIXED";
+  discountValue: number;
+  active: boolean;
+  minPurchase: number;
+  maxUses: number | null;
+  usesCount: number;
+  expiresAt: string | null;
 };
 
 export type View =

@@ -1,10 +1,12 @@
 package com.petshop.app.controller;
 
 import com.petshop.app.model.CartItem;
+import com.petshop.app.model.Coupon;
 import com.petshop.app.model.Order;
 import com.petshop.app.model.Product;
 import com.petshop.app.model.ProductVariant;
 import com.petshop.app.repository.CartItemRepository;
+import com.petshop.app.repository.CouponRepository;
 import com.petshop.app.repository.OrderRepository;
 import com.petshop.app.repository.ProductRepository;
 import com.petshop.app.repository.ProductVariantRepository;
@@ -33,12 +35,13 @@ public class CartController {
     private final ProductVariantRepository variantRepository;
     private final CartItemRepository cartItemRepository;
     private final OrderRepository orderRepository;
+    private final CouponRepository couponRepository;
     private final JwtUtil jwtUtil;
     private final NotificationService notificationService;
 
     public CartController(InMemoryStore store, ProductRepository productRepository, CartItemRepository cartItemRepository,
                            OrderRepository orderRepository, JwtUtil jwtUtil, NotificationService notificationService,
-                           ProductVariantRepository variantRepository) {
+                           ProductVariantRepository variantRepository, CouponRepository couponRepository) {
         this.store = store;
         this.productRepository = productRepository;
         this.cartItemRepository = cartItemRepository;
@@ -46,6 +49,7 @@ public class CartController {
         this.jwtUtil = jwtUtil;
         this.notificationService = notificationService;
         this.variantRepository = variantRepository;
+        this.couponRepository = couponRepository;
     }
 
     private int availableStock(Product product, Long variantId) {
@@ -314,7 +318,20 @@ public class CartController {
 
         double subtotal = purchasedItems.stream().mapToDouble(i -> i.price * i.quantity).sum();
         double shippingCost = purchasedItems.isEmpty() ? 0 : SHIPPING_COST;
-        double total = subtotal + shippingCost;
+
+        String couponCode = shipping.getOrDefault("cupon", "").trim();
+        double discountAmount = 0;
+        Coupon appliedCoupon = null;
+        if (!purchasedItems.isEmpty() && !couponCode.isBlank()) {
+            appliedCoupon = couponRepository.findByCodeIgnoreCase(couponCode).orElse(null);
+            if (appliedCoupon == null || !appliedCoupon.active || appliedCoupon.isExpired()
+                    || !appliedCoupon.hasUsesLeft() || subtotal < appliedCoupon.minPurchase) {
+                return ResponseEntity.badRequest().body(Map.of("error", "El cupón ya no es válido"));
+            }
+            discountAmount = appliedCoupon.computeDiscount(subtotal);
+        }
+
+        double total = subtotal + shippingCost - discountAmount;
         Long orderId = null;
 
         if (!purchasedItems.isEmpty()) {
@@ -324,6 +341,8 @@ public class CartController {
             Order order = new Order(userToken, Instant.now(), orderItems, total, "COMPLETADA");
             order.subtotal = subtotal;
             order.shippingCost = shippingCost;
+            order.discountAmount = discountAmount;
+            order.couponCode = appliedCoupon != null ? appliedCoupon.code : null;
             order.shippingName = shippingName;
             order.shippingAddress = shippingAddress;
             order.shippingCity = shippingCity;
@@ -331,6 +350,11 @@ public class CartController {
             order.shippingPhone = shippingPhone;
             orderRepository.save(order);
             orderId = order.id;
+
+            if (appliedCoupon != null) {
+                appliedCoupon.usesCount += 1;
+                couponRepository.save(appliedCoupon);
+            }
 
             if (!guest) {
                 String email = jwtUtil.extractEmail(token);
@@ -349,6 +373,8 @@ public class CartController {
         response.put("items", purchasedItems);
         response.put("subtotal", subtotal);
         response.put("shippingCost", shippingCost);
+        response.put("discountAmount", discountAmount);
+        response.put("couponCode", appliedCoupon != null ? appliedCoupon.code : null);
         response.put("total", total);
         response.put("orderId", orderId);
         return ResponseEntity.ok(response);

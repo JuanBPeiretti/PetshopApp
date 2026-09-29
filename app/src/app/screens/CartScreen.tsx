@@ -1,11 +1,12 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { CartItem, ShippingInfo } from "../types";
+import { validateCoupon } from "../api";
 
 type Props = {
   items: CartItem[];
   requireShipping: boolean;
   onRemove: (item: CartItem) => void;
-  onCheckout: (shipping: Partial<ShippingInfo>) => void;
+  onCheckout: (shipping: Partial<ShippingInfo>, couponCode?: string | null) => void;
   onIncrement: (item: CartItem) => void;
   onDecrement: (item: CartItem) => void;
 };
@@ -23,14 +24,50 @@ const EMPTY_SHIPPING: ShippingInfo = {
 
 export function CartScreen({ items, requireShipping, onRemove, onCheckout, onIncrement, onDecrement }: Props) {
   const [shipping, setShipping] = useState<ShippingInfo>(EMPTY_SHIPPING);
+  const [couponInput, setCouponInput] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discountAmount: number } | null>(null);
+  const [couponError, setCouponError] = useState<string | null>(null);
+  const [couponLoading, setCouponLoading] = useState(false);
 
   const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const shippingCost = items.length > 0 ? 1500 : 0;
-  const total = subtotal + shippingCost;
+  const discountAmount = appliedCoupon?.discountAmount ?? 0;
+  const total = Math.max(0, subtotal + shippingCost - discountAmount);
+
+  useEffect(() => {
+    if (!appliedCoupon) return;
+    validateCoupon(appliedCoupon.code, subtotal)
+      .then((result) => setAppliedCoupon({ code: result.code, discountAmount: result.discountAmount }))
+      .catch(() => {
+        setAppliedCoupon(null);
+        setCouponError("El cupón dejó de ser válido y se quitó del pedido.");
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subtotal]);
+
+  const handleApplyCoupon = async () => {
+    if (!couponInput.trim()) return;
+    setCouponError(null);
+    setCouponLoading(true);
+    try {
+      const result = await validateCoupon(couponInput.trim(), subtotal);
+      setAppliedCoupon({ code: result.code, discountAmount: result.discountAmount });
+      setCouponInput("");
+    } catch (error) {
+      setCouponError(error instanceof Error ? error.message : "No se pudo aplicar el cupón");
+    } finally {
+      setCouponLoading(false);
+    }
+  };
+
+  const handleRemoveCoupon = () => {
+    setAppliedCoupon(null);
+    setCouponError(null);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onCheckout(requireShipping ? shipping : {});
+    onCheckout(requireShipping ? shipping : {}, appliedCoupon?.code);
   };
 
   return (
@@ -75,10 +112,42 @@ export function CartScreen({ items, requireShipping, onRemove, onCheckout, onInc
 
           <aside className="cart-summary">
             <h3>Resumen</h3>
+
+            <div className="coupon-box">
+              {appliedCoupon ? (
+                <div className="coupon-applied">
+                  <span>
+                    Cupón <strong>{appliedCoupon.code}</strong> aplicado
+                  </span>
+                  <button type="button" className="text-link" onClick={handleRemoveCoupon}>
+                    Quitar
+                  </button>
+                </div>
+              ) : (
+                <div className="coupon-input-row">
+                  <input
+                    value={couponInput}
+                    onChange={(e) => setCouponInput(e.target.value)}
+                    placeholder="Código de cupón"
+                  />
+                  <button type="button" className="secondary-btn" onClick={handleApplyCoupon} disabled={couponLoading}>
+                    {couponLoading ? "Aplicando..." : "Aplicar"}
+                  </button>
+                </div>
+              )}
+              {couponError ? <div className="error-box">{couponError}</div> : null}
+            </div>
+
             <div className="summary-row">
               <span>Subtotal</span>
               <strong>{formatMoney(subtotal)}</strong>
             </div>
+            {discountAmount > 0 ? (
+              <div className="summary-row discount-row">
+                <span>Descuento</span>
+                <strong>-{formatMoney(discountAmount)}</strong>
+              </div>
+            ) : null}
             <div className="summary-row">
               <span>Envío</span>
               <strong>{formatMoney(shippingCost)}</strong>

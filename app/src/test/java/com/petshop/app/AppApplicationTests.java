@@ -2,10 +2,12 @@ package com.petshop.app;
 
 import com.petshop.app.controller.CartController;
 import com.petshop.app.model.CartItem;
+import com.petshop.app.model.Coupon;
 import com.petshop.app.model.Product;
 import com.petshop.app.model.ProductVariant;
 import com.petshop.app.model.Order;
 import com.petshop.app.repository.CartItemRepository;
+import com.petshop.app.repository.CouponRepository;
 import com.petshop.app.repository.OrderRepository;
 import com.petshop.app.repository.ProductRepository;
 import com.petshop.app.repository.ProductVariantRepository;
@@ -42,6 +44,7 @@ class AppApplicationTests {
     private JwtUtil jwtUtil;
     private NotificationService notificationService;
     private ProductVariantRepository variantRepository;
+    private CouponRepository couponRepository;
     private CartController cartController;
 
     @BeforeEach
@@ -80,7 +83,8 @@ class AppApplicationTests {
 
         notificationService = mock(NotificationService.class);
         variantRepository = mock(ProductVariantRepository.class);
-        cartController = new CartController(store, productRepository, cartItemRepository, orderRepository, jwtUtil, notificationService, variantRepository);
+        couponRepository = mock(CouponRepository.class);
+        cartController = new CartController(store, productRepository, cartItemRepository, orderRepository, jwtUtil, notificationService, variantRepository, couponRepository);
     }
 
     @Test
@@ -403,5 +407,79 @@ class AppApplicationTests {
         assertThat(cartController.remove(adminToken, null, item).getStatusCode().value()).isEqualTo(403);
         assertThat(cartController.checkout(adminToken, null, null).getStatusCode().value()).isEqualTo(403);
         assertThat(persistedCart).isEmpty();
+    }
+
+    @Test
+    void checkoutAppliesAValidCouponDiscount() {
+        Product product = new Product(
+            "p-coupon-1",
+            "Producto con cupon",
+            "Marca",
+            1000.0,
+            null,
+            4.0,
+            "/images/coupon-test.jpg",
+            "Nuevo",
+            "alimentos",
+            10
+        );
+        when(productRepository.findById("p-coupon-1")).thenReturn(Optional.of(product));
+
+        Coupon coupon = new Coupon("DESC10", Coupon.DiscountType.PERCENTAGE, 10, 0, null, null);
+        coupon.id = 1L;
+        when(couponRepository.findByCodeIgnoreCase("desc10")).thenReturn(Optional.of(coupon));
+
+        String token = jwtUtil.generateToken("user-1", "user1@example.com", "CUSTOMER");
+        cartController.add(token, null, new CartItem("p-coupon-1", "Producto con cupon", "alimentos", 1, 1000.0));
+
+        Map<String, String> shipping = Map.of(
+            "nombre", "Cliente Cupon",
+            "direccion", "Calle 1",
+            "ciudad", "CABA",
+            "cupon", "desc10"
+        );
+        ResponseEntity<?> checkout = cartController.checkout(token, null, shipping);
+
+        assertThat(checkout.getStatusCode().is2xxSuccessful()).isTrue();
+        Map<?, ?> body = (Map<?, ?>) checkout.getBody();
+        assertThat(body.get("discountAmount")).isEqualTo(100.0);
+        assertThat(body.get("total")).isEqualTo(2400.0);
+        assertThat(coupon.usesCount).isEqualTo(1);
+
+        Order order = savedOrders.get(0);
+        assertThat(order.couponCode).isEqualTo("DESC10");
+        assertThat(order.discountAmount).isEqualTo(100.0);
+    }
+
+    @Test
+    void checkoutRejectsAnInvalidCoupon() {
+        Product product = new Product(
+            "p-coupon-2",
+            "Producto sin cupon",
+            "Marca",
+            500.0,
+            null,
+            4.0,
+            "/images/coupon-test-2.jpg",
+            "Nuevo",
+            "alimentos",
+            10
+        );
+        when(productRepository.findById("p-coupon-2")).thenReturn(Optional.of(product));
+        when(couponRepository.findByCodeIgnoreCase("NOEXISTE")).thenReturn(Optional.empty());
+
+        String token = jwtUtil.generateToken("user-1", "user1@example.com", "CUSTOMER");
+        cartController.add(token, null, new CartItem("p-coupon-2", "Producto sin cupon", "alimentos", 1, 500.0));
+
+        Map<String, String> shipping = Map.of(
+            "nombre", "Cliente",
+            "direccion", "Calle 1",
+            "ciudad", "CABA",
+            "cupon", "NOEXISTE"
+        );
+        ResponseEntity<?> checkout = cartController.checkout(token, null, shipping);
+
+        assertThat(checkout.getStatusCode().is4xxClientError()).isTrue();
+        assertThat(savedOrders).isEmpty();
     }
 }

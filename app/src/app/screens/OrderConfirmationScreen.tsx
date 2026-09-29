@@ -49,6 +49,12 @@ export function OrderConfirmationScreen({ result, isLoggedIn, onNavigate }: Prop
             <span>Subtotal</span>
             <strong>{formatMoney(result.subtotal)}</strong>
           </div>
+          {result.discountAmount > 0 ? (
+            <div className="summary-row discount-row">
+              <span>Descuento {result.couponCode ? `(${result.couponCode})` : ""}</span>
+              <strong>-{formatMoney(result.discountAmount)}</strong>
+            </div>
+          ) : null}
           <div className="summary-row">
             <span>Envío</span>
             <strong>{formatMoney(result.shippingCost)}</strong>

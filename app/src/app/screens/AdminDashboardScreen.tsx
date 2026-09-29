@@ -10,23 +10,27 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { Category, OrderRecord, OrderStats, Product, ProductVariant, ReturnRecord, User } from "../types";
+import type { Category, Coupon, OrderRecord, OrderStats, Product, ProductVariant, ReturnRecord, User } from "../types";
 import {
   createCategory,
+  createCoupon,
   createProduct,
   createProductVariant,
   deleteCategory,
+  deleteCoupon,
   deleteProduct,
   deleteProductVariant,
   fetchAllOrders,
   fetchAllReturns,
   fetchAllUsers,
   fetchCategories,
+  fetchCoupons,
   fetchOrderStats,
   fetchProducts,
   fetchProductVariants,
   processRefund,
   updateCategory,
+  updateCoupon,
   updateOrderStatus,
   updateProduct,
   updateProductVariant,
@@ -42,9 +46,19 @@ type Props = {
   currentUserId: string;
 };
 
-type Tab = "stats" | "orders" | "products" | "categories" | "returns" | "users";
+type Tab = "stats" | "orders" | "products" | "categories" | "returns" | "users" | "coupons";
 
 const EMPTY_CATEGORY_FORM = { id: "", name: "", color: "#f97316" };
+
+const EMPTY_COUPON_FORM = {
+  code: "",
+  discountType: "PERCENTAGE" as "PERCENTAGE" | "FIXED",
+  discountValue: "",
+  minPurchase: "",
+  maxUses: "",
+  expiresAt: "",
+  active: true,
+};
 
 const formatMoney = (value: number) =>
   new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(value);
@@ -100,6 +114,12 @@ export function AdminDashboardScreen({ authToken, categories, currentUserId }: P
   const [categoryForm, setCategoryForm] = useState(EMPTY_CATEGORY_FORM);
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
   const [categoryError, setCategoryError] = useState<string | null>(null);
+
+  const [couponList, setCouponList] = useState<Coupon[]>([]);
+  const [couponsLoading, setCouponsLoading] = useState(false);
+  const [couponForm, setCouponForm] = useState(EMPTY_COUPON_FORM);
+  const [editingCouponId, setEditingCouponId] = useState<number | null>(null);
+  const [couponError, setCouponError] = useState<string | null>(null);
 
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -193,6 +213,82 @@ export function AdminDashboardScreen({ authToken, categories, currentUserId }: P
     }
   };
 
+  const loadCoupons = async () => {
+    setCouponsLoading(true);
+    try {
+      setCouponList(await fetchCoupons(authToken));
+    } catch (error) {
+      console.error("No se pudieron cargar los cupones", error);
+    } finally {
+      setCouponsLoading(false);
+    }
+  };
+
+  const startEditCoupon = (coupon: Coupon) => {
+    setEditingCouponId(coupon.id);
+    setCouponForm({
+      code: coupon.code,
+      discountType: coupon.discountType,
+      discountValue: String(coupon.discountValue),
+      minPurchase: coupon.minPurchase ? String(coupon.minPurchase) : "",
+      maxUses: coupon.maxUses != null ? String(coupon.maxUses) : "",
+      expiresAt: coupon.expiresAt ? coupon.expiresAt.slice(0, 10) : "",
+      active: coupon.active,
+    });
+    setCouponError(null);
+  };
+
+  const resetCouponForm = () => {
+    setEditingCouponId(null);
+    setCouponForm(EMPTY_COUPON_FORM);
+    setCouponError(null);
+  };
+
+  const handleCouponSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCouponError(null);
+
+    if (!couponForm.code.trim() || !couponForm.discountValue) {
+      setCouponError("Completa al menos el código y el valor del descuento.");
+      return;
+    }
+
+    const payload: Partial<Coupon> = {
+      code: couponForm.code.trim(),
+      discountType: couponForm.discountType,
+      discountValue: Number(couponForm.discountValue),
+      minPurchase: couponForm.minPurchase ? Number(couponForm.minPurchase) : 0,
+      maxUses: couponForm.maxUses ? Number(couponForm.maxUses) : null,
+      expiresAt: couponForm.expiresAt ? new Date(couponForm.expiresAt).toISOString() : null,
+      active: couponForm.active,
+    };
+
+    try {
+      if (editingCouponId) {
+        await updateCoupon(authToken, editingCouponId, payload);
+      } else {
+        await createCoupon(authToken, payload);
+      }
+      resetCouponForm();
+      await loadCoupons();
+    } catch (error) {
+      setCouponError(error instanceof Error ? error.message : "No se pudo guardar el cupón");
+    }
+  };
+
+  const handleDeleteCoupon = async (coupon: Coupon) => {
+    setActionError(null);
+    try {
+      await deleteCoupon(authToken, coupon.id);
+      await loadCoupons();
+      if (editingCouponId === coupon.id) {
+        resetCouponForm();
+      }
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "No se pudo eliminar el cupón");
+    }
+  };
+
   useEffect(() => {
     void loadStats();
     void loadOrders();
@@ -200,6 +296,7 @@ export function AdminDashboardScreen({ authToken, categories, currentUserId }: P
     void loadReturns();
     void loadCategories();
     void loadUsers();
+    void loadCoupons();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -219,17 +316,61 @@ export function AdminDashboardScreen({ authToken, categories, currentUserId }: P
 
   const orderStatuses = Array.from(new Set(orders.map((o) => o.estado)));
 
+  const [statsFrom, setStatsFrom] = useState("");
+  const [statsTo, setStatsTo] = useState("");
+
+  const statsFilteredOrders = useMemo(() => {
+    return orders.filter((order) => {
+      const day = new Date(order.fecha).toISOString().slice(0, 10);
+      if (statsFrom && day < statsFrom) return false;
+      if (statsTo && day > statsTo) return false;
+      return true;
+    });
+  }, [orders, statsFrom, statsTo]);
+
+  const filteredTotalOrders = statsFilteredOrders.length;
+  const filteredTotalRevenue = statsFilteredOrders.reduce((sum, o) => sum + o.total, 0);
+
+  const filteredTopProducts = useMemo(() => {
+    const quantityById = new Map<string, number>();
+    statsFilteredOrders.forEach((order) => {
+      order.items.forEach((item) => {
+        quantityById.set(item.productId, (quantityById.get(item.productId) || 0) + item.quantity);
+      });
+    });
+    const nameById = new Map(products.map((p) => [p.id, p.name]));
+    return [...quantityById.entries()]
+      .map(([productId, totalQuantity]) => ({
+        productId,
+        name: nameById.get(productId) || productId,
+        totalQuantity,
+      }))
+      .sort((a, b) => b.totalQuantity - a.totalQuantity)
+      .slice(0, 5);
+  }, [statsFilteredOrders, products]);
+
   const revenueByDay = useMemo(() => {
+    let start: Date;
+    let end: Date;
+    if (statsFrom || statsTo) {
+      start = new Date(statsFrom || statsTo);
+      end = new Date(statsTo || statsFrom);
+    } else {
+      end = new Date();
+      start = new Date();
+      start.setDate(start.getDate() - 6);
+    }
+
     const days: { date: string; label: string; total: number }[] = [];
-    const now = new Date();
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(now);
-      d.setDate(d.getDate() - i);
-      const key = d.toISOString().slice(0, 10);
-      days.push({ date: key, label: d.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" }), total: 0 });
+    const cursor = new Date(start);
+    const MAX_DAYS = 60;
+    while (cursor <= end && days.length < MAX_DAYS) {
+      const key = cursor.toISOString().slice(0, 10);
+      days.push({ date: key, label: cursor.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" }), total: 0 });
+      cursor.setDate(cursor.getDate() + 1);
     }
     const byDate = new Map(days.map((d) => [d.date, d]));
-    orders.forEach((order) => {
+    statsFilteredOrders.forEach((order) => {
       const key = new Date(order.fecha).toISOString().slice(0, 10);
       const entry = byDate.get(key);
       if (entry) {
@@ -237,7 +378,33 @@ export function AdminDashboardScreen({ authToken, categories, currentUserId }: P
       }
     });
     return days;
-  }, [orders]);
+  }, [statsFilteredOrders, statsFrom, statsTo]);
+
+  const handleExportCsv = () => {
+    const headers = ["ID", "Fecha", "Usuario", "Items", "Subtotal", "Envio", "Descuento", "Cupon", "Total", "Estado"];
+    const rows = statsFilteredOrders.map((o) => [
+      o.id,
+      new Date(o.fecha).toLocaleString("es-AR"),
+      o.userId,
+      o.items.reduce((sum, i) => sum + i.quantity, 0),
+      o.subtotal ?? "",
+      o.shippingCost ?? "",
+      o.discountAmount ?? "",
+      o.couponCode ?? "",
+      o.total,
+      o.estado,
+    ]);
+    const csv = [headers, ...rows]
+      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `ordenes_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
 
   const ORDERS_PAGE_SIZE = 10;
   const [orderPage, setOrderPage] = useState(1);
@@ -522,6 +689,9 @@ export function AdminDashboardScreen({ authToken, categories, currentUserId }: P
         <button className={tab === "users" ? "admin-tab active" : "admin-tab"} onClick={() => setTab("users")}>
           Usuarios
         </button>
+        <button className={tab === "coupons" ? "admin-tab active" : "admin-tab"} onClick={() => setTab("coupons")}>
+          Cupones
+        </button>
       </div>
 
       {actionError ? <div className="error-box">{actionError}</div> : null}
@@ -532,14 +702,42 @@ export function AdminDashboardScreen({ authToken, categories, currentUserId }: P
             <div className="empty-state">Cargando estadísticas...</div>
           ) : (
             <>
+              <div className="toolbar-card">
+                <div className="toolbar-row">
+                  <label>
+                    <span>Desde</span>
+                    <input type="date" value={statsFrom} onChange={(e) => setStatsFrom(e.target.value)} />
+                  </label>
+                  <label>
+                    <span>Hasta</span>
+                    <input type="date" value={statsTo} onChange={(e) => setStatsTo(e.target.value)} />
+                  </label>
+                  {statsFrom || statsTo ? (
+                    <button
+                      className="secondary-btn"
+                      type="button"
+                      onClick={() => {
+                        setStatsFrom("");
+                        setStatsTo("");
+                      }}
+                    >
+                      Limpiar filtro
+                    </button>
+                  ) : null}
+                  <button className="secondary-btn" type="button" onClick={handleExportCsv}>
+                    Exportar CSV
+                  </button>
+                </div>
+              </div>
+
               <div className="stats-grid">
                 <div className="stat-card">
-                  <span>Total de órdenes</span>
-                  <strong>{stats.totalOrders}</strong>
+                  <span>{statsFrom || statsTo ? "Órdenes en el rango" : "Total de órdenes"}</span>
+                  <strong>{filteredTotalOrders}</strong>
                 </div>
                 <div className="stat-card">
-                  <span>Ingresos totales</span>
-                  <strong>{formatMoney(stats.totalRevenue)}</strong>
+                  <span>{statsFrom || statsTo ? "Ingresos en el rango" : "Ingresos totales"}</span>
+                  <strong>{formatMoney(filteredTotalRevenue)}</strong>
                 </div>
                 <div className="stat-card">
                   <span>Órdenes de hoy</span>
@@ -549,7 +747,7 @@ export function AdminDashboardScreen({ authToken, categories, currentUserId }: P
 
               <div className="charts-grid">
                 <div className="chart-card">
-                  <h3>Ingresos — últimos 7 días</h3>
+                  <h3>Ingresos {statsFrom || statsTo ? "— rango seleccionado" : "— últimos 7 días"}</h3>
                   <ResponsiveContainer width="100%" height={240}>
                     <AreaChart data={revenueByDay}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#fed7aa" />
@@ -563,11 +761,11 @@ export function AdminDashboardScreen({ authToken, categories, currentUserId }: P
 
                 <div className="chart-card">
                   <h3>Top productos vendidos</h3>
-                  {stats.topProducts.length === 0 ? (
+                  {filteredTopProducts.length === 0 ? (
                     <div className="empty-state">Todavía no hay ventas.</div>
                   ) : (
                     <ResponsiveContainer width="100%" height={240}>
-                      <BarChart data={stats.topProducts} layout="vertical" margin={{ left: 24 }}>
+                      <BarChart data={filteredTopProducts} layout="vertical" margin={{ left: 24 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#fed7aa" />
                         <XAxis type="number" stroke="#7c2d12" fontSize={12} allowDecimals={false} />
                         <YAxis type="category" dataKey="name" width={130} stroke="#7c2d12" fontSize={11} />
@@ -589,12 +787,12 @@ export function AdminDashboardScreen({ authToken, categories, currentUserId }: P
                     </tr>
                   </thead>
                   <tbody>
-                    {stats.topProducts.length === 0 ? (
+                    {filteredTopProducts.length === 0 ? (
                       <tr>
                         <td colSpan={3}>Todavía no hay ventas.</td>
                       </tr>
                     ) : (
-                      stats.topProducts.map((product, index) => (
+                      filteredTopProducts.map((product, index) => (
                         <tr key={product.productId}>
                           <td>{index + 1}</td>
                           <td>{product.name}</td>
@@ -1121,6 +1319,137 @@ export function AdminDashboardScreen({ authToken, categories, currentUserId }: P
                       </tr>
                     );
                   })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      ) : null}
+
+      {tab === "coupons" ? (
+        <section className="admin-section">
+          <form className="admin-form-grid" onSubmit={handleCouponSubmit}>
+            <label>
+              <span>Código</span>
+              <input
+                value={couponForm.code}
+                onChange={(e) => setCouponForm({ ...couponForm, code: e.target.value.toUpperCase() })}
+                placeholder="VERANO10"
+              />
+            </label>
+            <label>
+              <span>Tipo de descuento</span>
+              <select
+                value={couponForm.discountType}
+                onChange={(e) => setCouponForm({ ...couponForm, discountType: e.target.value as "PERCENTAGE" | "FIXED" })}
+              >
+                <option value="PERCENTAGE">Porcentaje (%)</option>
+                <option value="FIXED">Monto fijo ($)</option>
+              </select>
+            </label>
+            <label>
+              <span>Valor del descuento</span>
+              <input
+                type="number"
+                value={couponForm.discountValue}
+                onChange={(e) => setCouponForm({ ...couponForm, discountValue: e.target.value })}
+              />
+            </label>
+            <label>
+              <span>Compra mínima</span>
+              <input
+                type="number"
+                value={couponForm.minPurchase}
+                onChange={(e) => setCouponForm({ ...couponForm, minPurchase: e.target.value })}
+              />
+            </label>
+            <label>
+              <span>Usos máximos (vacío = ilimitado)</span>
+              <input
+                type="number"
+                value={couponForm.maxUses}
+                onChange={(e) => setCouponForm({ ...couponForm, maxUses: e.target.value })}
+              />
+            </label>
+            <label>
+              <span>Vence (opcional)</span>
+              <input
+                type="date"
+                value={couponForm.expiresAt}
+                onChange={(e) => setCouponForm({ ...couponForm, expiresAt: e.target.value })}
+              />
+            </label>
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={couponForm.active}
+                onChange={(e) => setCouponForm({ ...couponForm, active: e.target.checked })}
+              />
+              <span>Activo</span>
+            </label>
+
+            {couponError ? <div className="error-box admin-form-wide">{couponError}</div> : null}
+
+            <div className="admin-form-actions admin-form-wide">
+              <button className="primary-btn" type="submit">
+                {editingCouponId ? "Guardar cambios" : "Crear cupón"}
+              </button>
+              {editingCouponId ? (
+                <button className="secondary-btn" type="button" onClick={resetCouponForm}>
+                  Cancelar edición
+                </button>
+              ) : null}
+            </div>
+          </form>
+
+          {couponsLoading ? (
+            <div className="empty-state">Cargando cupones...</div>
+          ) : couponList.length === 0 ? (
+            <div className="empty-state">No hay cupones creados todavía.</div>
+          ) : (
+            <div className="admin-table-wrap">
+              <table className="admin-table">
+                <thead>
+                  <tr>
+                    <th>Código</th>
+                    <th>Descuento</th>
+                    <th>Compra mínima</th>
+                    <th>Usos</th>
+                    <th>Vence</th>
+                    <th>Estado</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {couponList.map((coupon) => (
+                    <tr key={coupon.id}>
+                      <td className="mono">{coupon.code}</td>
+                      <td>
+                        {coupon.discountType === "PERCENTAGE"
+                          ? `${coupon.discountValue}%`
+                          : formatMoney(coupon.discountValue)}
+                      </td>
+                      <td>{coupon.minPurchase ? formatMoney(coupon.minPurchase) : "—"}</td>
+                      <td>
+                        {coupon.usesCount}
+                        {coupon.maxUses != null ? ` / ${coupon.maxUses}` : ""}
+                      </td>
+                      <td>{coupon.expiresAt ? new Date(coupon.expiresAt).toLocaleDateString("es-AR") : "—"}</td>
+                      <td>
+                        <span className="status-badge">{coupon.active ? "Activo" : "Inactivo"}</span>
+                      </td>
+                      <td>
+                        <div className="admin-row-actions">
+                          <button className="secondary-btn" onClick={() => startEditCoupon(coupon)}>
+                            Editar
+                          </button>
+                          <button className="secondary-btn danger" onClick={() => handleDeleteCoupon(coupon)}>
+                            Eliminar
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>

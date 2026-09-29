@@ -210,9 +210,9 @@ function App() {
     }
   };
 
-  const handleCheckout = async (shipping: Partial<ShippingInfo>) => {
+  const handleCheckout = async (shipping: Partial<ShippingInfo>, couponCode?: string | null) => {
     try {
-      const result = await checkoutCart(authToken, shipping);
+      const result = await checkoutCart(authToken, shipping, couponCode);
       setCartItems([]);
       setLastCheckout(result);
       setView("confirmation");

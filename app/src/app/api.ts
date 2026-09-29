@@ -1,4 +1,4 @@
-import type { CartItem, Category, CheckoutResult, OrderRecord, OrderStats, Product, ProductVariant, ReturnRecord, Review, ShippingInfo, User } from "./types";
+import type { CartItem, Category, CheckoutResult, Coupon, OrderRecord, OrderStats, Product, ProductVariant, ReturnRecord, Review, ShippingInfo, User } from "./types";
 
 const API_BASE_URL = "http://localhost:8080/api";
 const API_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, "");
@@ -251,11 +251,51 @@ export async function decrementCartItem(token: string | null, productId: string,
   });
 }
 
-export async function checkoutCart(token: string | null, shipping?: Partial<ShippingInfo>): Promise<CheckoutResult> {
+export async function checkoutCart(
+  token: string | null,
+  shipping?: Partial<ShippingInfo>,
+  couponCode?: string | null,
+): Promise<CheckoutResult> {
   return request<CheckoutResult>("/cart/checkout", {
     method: "POST",
     headers: cartHeaders(token),
-    body: JSON.stringify(shipping || {}),
+    body: JSON.stringify({ ...(shipping || {}), ...(couponCode ? { cupon: couponCode } : {}) }),
+  });
+}
+
+export async function validateCoupon(code: string, subtotal: number): Promise<{ code: string; discountAmount: number }> {
+  return request<{ code: string; discountAmount: number }>("/coupons/validate", {
+    method: "POST",
+    body: JSON.stringify({ code, subtotal }),
+  });
+}
+
+export async function fetchCoupons(token: string): Promise<Coupon[]> {
+  return request<Coupon[]>("/coupons", {
+    headers: { "X-Auth-Token": token },
+  });
+}
+
+export async function createCoupon(token: string, coupon: Partial<Coupon>): Promise<Coupon> {
+  return request<Coupon>("/coupons", {
+    method: "POST",
+    headers: { "X-Auth-Token": token },
+    body: JSON.stringify(coupon),
+  });
+}
+
+export async function updateCoupon(token: string, id: number, coupon: Partial<Coupon>): Promise<Coupon> {
+  return request<Coupon>(`/coupons/${id}`, {
+    method: "PUT",
+    headers: { "X-Auth-Token": token },
+    body: JSON.stringify(coupon),
+  });
+}
+
+export async function deleteCoupon(token: string, id: number): Promise<{ ok: boolean }> {
+  return request<{ ok: boolean }>(`/coupons/${id}`, {
+    method: "DELETE",
+    headers: { "X-Auth-Token": token },
   });
 }
 
