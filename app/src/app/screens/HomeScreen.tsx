@@ -6,12 +6,24 @@ type Props = {
   currentUser: User | null;
   onNavigate: (view: "home" | "products" | "offers" | "categories" | "cart" | "login") => void;
   onAddToCart: (product: Product) => void;
+  onOpenProduct: (id: string) => void;
+  wishlist: string[];
+  onToggleWishlist: (productId: string) => void;
 };
 
 const formatMoney = (value: number) =>
   new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(value);
 
-export function HomeScreen({ categories, products, currentUser, onNavigate, onAddToCart }: Props) {
+export function HomeScreen({
+  categories,
+  products,
+  currentUser,
+  onNavigate,
+  onAddToCart,
+  onOpenProduct,
+  wishlist,
+  onToggleWishlist,
+}: Props) {
   const featured = products.slice(0, 4);
 
   return (
@@ -82,13 +94,25 @@ export function HomeScreen({ categories, products, currentUser, onNavigate, onAd
         <div className="product-grid">
           {featured.map((product) => (
             <article key={product.id} className="product-card">
-              <div className="product-image-wrap">
+              <div className="product-image-wrap product-clickable" onClick={() => onOpenProduct(product.id)}>
                 <img src={product.imageUrl || "https://images.unsplash.com/photo-1583337130417-3346a1be7dee?auto=format&fit=crop&w=700&q=80"} alt={product.name} />
                 {product.badge && <span className="product-badge">{product.badge}</span>}
+                {currentUser?.role !== "ADMIN" ? (
+                  <button
+                    className={wishlist.includes(product.id) ? "wishlist-heart active" : "wishlist-heart"}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onToggleWishlist(product.id);
+                    }}
+                    aria-label={wishlist.includes(product.id) ? "Quitar de favoritos" : "Agregar a favoritos"}
+                  >
+                    ♥
+                  </button>
+                ) : null}
               </div>
               <div className="product-body">
                 <span className="brand">{product.brand}</span>
-                <h3>{product.name}</h3>
+                <h3 onClick={() => onOpenProduct(product.id)} className="product-name-link">{product.name}</h3>
                 <div className="rating-row">
                   <span>⭐ {product.rating.toFixed(1)}</span>
                   <span>{product.stock} disponibles</span>
@@ -97,9 +121,11 @@ export function HomeScreen({ categories, products, currentUser, onNavigate, onAd
                   <strong>{formatMoney(product.price)}</strong>
                   {product.oldPrice ? <span>{formatMoney(product.oldPrice)}</span> : null}
                 </div>
-                <button className="primary-btn block" onClick={() => onAddToCart(product)}>
-                  Agregar al carrito
-                </button>
+                {currentUser?.role !== "ADMIN" ? (
+                  <button className="primary-btn block" onClick={() => onAddToCart(product)} disabled={product.stock <= 0}>
+                    {product.stock <= 0 ? "Sin stock" : product.hasVariants ? "Ver opciones" : "Agregar al carrito"}
+                  </button>
+                ) : null}
               </div>
             </article>
           ))}

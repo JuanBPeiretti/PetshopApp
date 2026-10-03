@@ -1,39 +1,143 @@
 package com.petshop.app.controller;
 
 import com.petshop.app.model.Product;
+import com.petshop.app.model.ProductVariant;
 import com.petshop.app.repository.ProductRepository;
+import com.petshop.app.repository.ProductVariantRepository;
+import com.petshop.app.service.AdminGuard;
+import com.petshop.app.service.PriceAscStrategy;
+import com.petshop.app.service.PriceDescStrategy;
+import com.petshop.app.service.ProductSortStrategy;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/products")
 public class ProductController {
 
     private final ProductRepository productRepository;
+    private final ProductVariantRepository productVariantRepository;
+    private final ProductSortStrategy priceAscStrategy;
+    private final ProductSortStrategy priceDescStrategy;
+    private final AdminGuard adminGuard;
 
-    public ProductController(ProductRepository productRepository) {
+    public ProductController(ProductRepository productRepository, ProductVariantRepository productVariantRepository,
+                              PriceAscStrategy priceAscStrategy, PriceDescStrategy priceDescStrategy, AdminGuard adminGuard) {
         this.productRepository = productRepository;
+        this.productVariantRepository = productVariantRepository;
+        this.priceAscStrategy = priceAscStrategy;
+        this.priceDescStrategy = priceDescStrategy;
+        this.adminGuard = adminGuard;
     }
 
     @GetMapping
-    public List<Product> list(@RequestParam(required = false) String category, @RequestParam(required = false) String sort) {
+    public List<Product> list(@RequestParam(required = false) String category,
+                               @RequestParam(required = false) String sort,
+                               @RequestParam(required = false) String search) {
         List<Product> filtered = (category == null || category.isBlank())
                 ? productRepository.findAll()
                 : productRepository.findByCategoryIdIgnoreCase(category);
 
-        if ("Menor precio".equalsIgnoreCase(sort) || "menorprecio".equalsIgnoreCase(sort)) {
-            filtered.sort(Comparator.comparingDouble(p -> p.price));
-        } else if ("Mayor precio".equalsIgnoreCase(sort) || "mayorprecio".equalsIgnoreCase(sort)) {
-            filtered.sort(Comparator.comparingDouble((Product p) -> p.price).reversed());
+        if (search != null && !search.isBlank()) {
+            String needle = search.trim().toLowerCase();
+            filtered = filtered.stream()
+                    .filter(p -> (p.name != null && p.name.toLowerCase().contains(needle))
+                            || (p.brand != null && p.brand.toLowerCase().contains(needle)))
+                    .collect(Collectors.toList());
         }
 
+        ProductSortStrategy strategy = resolveStrategy(sort);
+        if (strategy != null) {
+            filtered = strategy.sort(filtered);
+        }
+
+        attachHasVariants(filtered);
         return filtered;
     }
 
+    private void attachHasVariants(List<Product> products) {
+        List<String> ids = products.stream().map(p -> p.id).toList();
+        if (ids.isEmpty()) {
+            return;
+        }
+        Set<String> withVariants = productVariantRepository.findByProductIdIn(ids).stream()
+                .map(v -> v.productId)
+                .collect(Collectors.toSet());
+        for (Product p : products) {
+            p.hasVariants = withVariants.contains(p.id);
+        }
+    }
+
+    private ProductSortStrategy resolveStrategy(String sort) {
+        if ("Menor precio".equalsIgnoreCase(sort) || "menorprecio".equalsIgnoreCase(sort)) {
+            return priceAscStrategy;
+        }
+        if ("Mayor precio".equalsIgnoreCase(sort) || "mayorprecio".equalsIgnoreCase(sort)) {
+            return priceDescStrategy;
+        }
+        return null;
+    }
+
     @GetMapping("/{id}")
-    public Product get(@PathVariable String id) {
-        return productRepository.findById(id).orElse(null);
+    public ResponseEntity<?> get(@PathVariable String id) {
+        Product product = productRepository.findById(id).orElse(null);
+        if (product == null) {
+            return ResponseEntity.status(404).body(Map.of("error", "Producto no encontrado"));
+        }
+        product.hasVariants = !productVariantRepository.findByProductId(id).isEmpty();
+        return ResponseEntity.ok(product);
+    }
+
+    @PostMapping
+    public ResponseEntity<?> create(@RequestHeader(value = "X-Auth-Token", required = false) String token,
+                                     @RequestBody Product product) {
+        if (!adminGuard.isAdmin(token)) {
+            return ResponseEntity.status(403).body(Map.of("error", "Requiere permisos de administrador"));
+        }
+
+        if (product.id == null || product.id.isBlank()) {
+            product.id = UUID.randomUUID().toString();
+        }
+        productRepository.save(product);
+        return ResponseEntity.ok(product);
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<?> update(@RequestHeader(value = "X-Auth-Token", required = false) String token,
+                                     @PathVariable String id,
+                                     @RequestBody Product product) {
+        if (!adminGuard.isAdmin(token)) {
+            return ResponseEntity.status(403).body(Map.of("error", "Requiere permisos de administrador"));
+        }
+
+        if (!productRepository.existsById(id)) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Producto no encontrado"));
+        }
+
+        product.id = id;
+        productRepository.save(product);
+        return ResponseEntity.ok(product);
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<?> delete(@RequestHeader(value = "X-Auth-Token", required = false) String token,
+                                     @PathVariable String id) {
+        if (!adminGuard.isAdmin(token)) {
+            return ResponseEntity.status(403).body(Map.of("error", "Requiere permisos de administrador"));
+        }
+
+        if (!productRepository.existsById(id)) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Producto no encontrado"));
+        }
+
+        productVariantRepository.deleteAll(productVariantRepository.findByProductId(id));
+        productRepository.deleteById(id);
+        return ResponseEntity.ok(Map.of("ok", true));
     }
 }

@@ -4,12 +4,15 @@ type Props = {
   products: Product[];
   onAddToCart: (product: Product) => void;
   onOpenProduct: (id: string) => void;
+  isAdmin: boolean;
+  wishlist: string[];
+  onToggleWishlist: (productId: string) => void;
 };
 
 const formatMoney = (value: number) =>
   new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(value);
 
-export function OffersScreen({ products, onAddToCart, onOpenProduct }: Props) {
+export function OffersScreen({ products, onAddToCart, onOpenProduct, isAdmin, wishlist, onToggleWishlist }: Props) {
   const offers = products.filter((product) => {
     const isDiscounted = Boolean(product.oldPrice && product.oldPrice > product.price);
     const hasPromoBadge = Boolean(product.badge && /(oferta|promo|descuento|sale)/i.test(product.badge));
@@ -41,6 +44,18 @@ export function OffersScreen({ products, onAddToCart, onOpenProduct }: Props) {
                   alt={product.name}
                 />
                 {product.badge ? <span className="product-badge">{product.badge}</span> : null}
+                {!isAdmin ? (
+                  <button
+                    className={wishlist.includes(product.id) ? "wishlist-heart active" : "wishlist-heart"}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onToggleWishlist(product.id);
+                    }}
+                    aria-label={wishlist.includes(product.id) ? "Quitar de favoritos" : "Agregar a favoritos"}
+                  >
+                    ♥
+                  </button>
+                ) : null}
               </div>
               <div className="product-body">
                 <span className="brand">{product.brand}</span>
@@ -53,9 +68,11 @@ export function OffersScreen({ products, onAddToCart, onOpenProduct }: Props) {
                   <strong>{formatMoney(product.price)}</strong>
                   {product.oldPrice ? <span>{formatMoney(product.oldPrice)}</span> : null}
                 </div>
-                <button className="primary-btn block" onClick={() => onAddToCart(product)}>
-                  Agregar al carrito
-                </button>
+                {!isAdmin ? (
+                  <button className="primary-btn block" onClick={() => onAddToCart(product)} disabled={product.stock <= 0}>
+                    {product.stock <= 0 ? "Sin stock" : product.hasVariants ? "Ver opciones" : "Agregar al carrito"}
+                  </button>
+                ) : null}
               </div>
             </article>
           ))}

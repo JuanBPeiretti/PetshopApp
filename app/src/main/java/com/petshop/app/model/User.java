@@ -4,6 +4,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.ColumnDefault;
 
 @Entity
 @Table(name = "users")
@@ -18,6 +19,12 @@ public class User {
     public String password;
 
     public String name;
+
+    public String role = "CUSTOMER";
+
+    @Column(nullable = false)
+    @ColumnDefault("true")
+    public boolean active = true;
 
     public User() {}
 
