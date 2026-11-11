@@ -10,7 +10,8 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { Category, Coupon, OrderRecord, OrderStats, Product, ProductVariant, ReturnRecord, User } from "../types";
+import type { Category, Coupon, OrderRecord, OrderStats, Product, ProductVariant, ReturnRecord, SiteSettings, User } from "../types";
+import { AnnouncementSettings } from "./AnnouncementSettings";
 import {
   createCategory,
   createCoupon,
@@ -44,9 +45,11 @@ type Props = {
   authToken: string;
   categories: Category[];
   currentUserId: string;
+  siteSettings: SiteSettings;
+  onSiteSettingsChange: (settings: SiteSettings) => void;
 };
 
-type Tab = "stats" | "orders" | "products" | "categories" | "returns" | "users" | "coupons";
+type Tab = "stats" | "orders" | "products" | "categories" | "returns" | "users" | "coupons" | "announcements";
 
 const EMPTY_CATEGORY_FORM = { id: "", name: "", color: "#f97316" };
 
@@ -62,6 +65,21 @@ const EMPTY_COUPON_FORM = {
 
 const formatMoney = (value: number) =>
   new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(value);
+
+const PROMO_TYPES = [
+  "2x1",
+  "3x2",
+  "3x1",
+  "2do al 50%",
+  "10% OFF",
+  "15% OFF",
+  "20% OFF",
+  "25% OFF",
+  "30% OFF",
+  "40% OFF",
+  "50% OFF",
+  "Envío gratis",
+];
 
 const EMPTY_VARIANT_FORM = { talle: "", color: "", stock: "", imageUrl: "" };
 
@@ -80,7 +98,7 @@ const EMPTY_PRODUCT_FORM = {
   tipoPromocion: "",
 };
 
-export function AdminDashboardScreen({ authToken, categories, currentUserId }: Props) {
+export function AdminDashboardScreen({ authToken, categories, currentUserId, siteSettings, onSiteSettingsChange }: Props) {
   const [tab, setTab] = useState<Tab>("stats");
 
   const [users, setUsers] = useState<User[]>([]);
@@ -243,6 +261,18 @@ export function AdminDashboardScreen({ authToken, categories, currentUserId }: P
     setEditingCouponId(null);
     setCouponForm(EMPTY_COUPON_FORM);
     setCouponError(null);
+  };
+
+  // Al elegir "N% OFF" y no haber precio promocional, lo calcula a partir del precio (se puede editar después).
+  const handlePromoTypeChange = (tipoPromocion: string) => {
+    const percent = /^(\d+)% OFF$/.exec(tipoPromocion);
+    const price = Number(productForm.price);
+    if (percent && !productForm.precioPromocional && price > 0) {
+      const discounted = Math.round(price * (1 - Number(percent[1]) / 100) * 100) / 100;
+      setProductForm({ ...productForm, tipoPromocion, precioPromocional: String(discounted) });
+      return;
+    }
+    setProductForm({ ...productForm, tipoPromocion });
   };
 
   const handleCouponSubmit = async (e: React.FormEvent) => {
@@ -712,6 +742,9 @@ export function AdminDashboardScreen({ authToken, categories, currentUserId }: P
         <button className={tab === "coupons" ? "admin-tab active" : "admin-tab"} onClick={() => setTab("coupons")}>
           Cupones
         </button>
+        <button className={tab === "announcements" ? "admin-tab active" : "admin-tab"} onClick={() => setTab("announcements")}>
+          Anuncios
+        </button>
       </div>
 
       {actionError ? <div className="error-box">{actionError}</div> : null}
@@ -968,11 +1001,20 @@ export function AdminDashboardScreen({ authToken, categories, currentUserId }: P
             </label>
             <label>
               <span>Tipo de promoción</span>
-              <input
-                placeholder="2x1, 20% OFF..."
+              <select
                 value={productForm.tipoPromocion}
-                onChange={(e) => setProductForm({ ...productForm, tipoPromocion: e.target.value })}
-              />
+                onChange={(e) => handlePromoTypeChange(e.target.value)}
+              >
+                <option value="">Sin tipo</option>
+                {PROMO_TYPES.map((type) => (
+                  <option key={type} value={type}>
+                    {type}
+                  </option>
+                ))}
+                {productForm.tipoPromocion && !PROMO_TYPES.includes(productForm.tipoPromocion) ? (
+                  <option value={productForm.tipoPromocion}>{productForm.tipoPromocion}</option>
+                ) : null}
+              </select>
             </label>
             <label className="admin-form-wide">
               <span>URL de imagen</span>
@@ -1369,6 +1411,10 @@ export function AdminDashboardScreen({ authToken, categories, currentUserId }: P
         </section>
       ) : null}
 
+      {tab === "announcements" ? (
+        <AnnouncementSettings authToken={authToken} settings={siteSettings} onSaved={onSiteSettingsChange} />
+      ) : null}
+
       {tab === "coupons" ? (
         <section className="admin-section">
           <form className="admin-form-grid" onSubmit={handleCouponSubmit}>
@@ -1407,9 +1453,11 @@ export function AdminDashboardScreen({ authToken, categories, currentUserId }: P
               />
             </label>
             <label>
-              <span>Usos máximos (vacío = ilimitado)</span>
+              <span>Usos máximos</span>
               <input
                 type="number"
+                min="1"
+                placeholder="Ilimitado"
                 value={couponForm.maxUses}
                 onChange={(e) => setCouponForm({ ...couponForm, maxUses: e.target.value })}
               />

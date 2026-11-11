@@ -1,6 +1,9 @@
 package com.petshop.app.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.CollectionTable;
+import jakarta.persistence.Column;
+import org.hibernate.annotations.ColumnDefault;
 import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Embeddable;
 import jakarta.persistence.Entity;
@@ -36,6 +39,22 @@ public class Order {
     public String couponCode;
     public double total;
     public String estado;
+
+    public String idTransaccion;
+    public String estadoPago;
+    @JsonIgnore
+    public String medioPagoToken;
+
+    @JsonIgnore
+    @Column(nullable = false)
+    @ColumnDefault("0")
+    public int intentosPago = 0;
+
+    /** Parte de discountAmount que corresponde a la ruleta del día (y la categoría sorteada). */
+    @Column(nullable = false)
+    @ColumnDefault("0")
+    public double ruletaDescuento;
+    public String ruletaCategoria;
 
     public String shippingName;
     public String shippingAddress;

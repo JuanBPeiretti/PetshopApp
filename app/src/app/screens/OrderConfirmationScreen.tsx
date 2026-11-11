@@ -10,16 +10,32 @@ const formatMoney = (value: number) =>
   new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(value);
 
 export function OrderConfirmationScreen({ result, isLoggedIn, onNavigate }: Props) {
+  const pagoPendiente = result.estado === "PAGO_PENDIENTE";
+
   return (
     <div className="page-shell confirmation-shell">
       <div className="confirmation-card">
-        <span className="confirmation-check">✓</span>
-        <h2>¡Compra confirmada!</h2>
-        <p>
-          {result.orderId != null
-            ? `Tu pedido #${result.orderId} se registró con éxito.`
-            : "Tu compra se realizó con éxito."}
-        </p>
+        {pagoPendiente ? (
+          <>
+            <span className="confirmation-check">…</span>
+            <h2>Estamos procesando tu pago</h2>
+            <p>
+              La pasarela de pago tardó en responder. Tu pedido #{result.orderId} quedó reservado y lo confirmamos
+              automáticamente en cuanto se acredite el pago; si no se acredita, se cancela y se libera el stock.
+              Podés seguir el estado en "Mis pedidos".
+            </p>
+          </>
+        ) : (
+          <>
+            <span className="confirmation-check">✓</span>
+            <h2>¡Compra confirmada!</h2>
+            <p>
+              {result.orderId != null
+                ? `Tu pedido #${result.orderId} se registró con éxito.`
+                : "Tu compra se realizó con éxito."}
+            </p>
+          </>
+        )}
 
         <div className="admin-table-wrap">
           <table className="admin-table">
@@ -49,10 +65,16 @@ export function OrderConfirmationScreen({ result, isLoggedIn, onNavigate }: Prop
             <span>Subtotal</span>
             <strong>{formatMoney(result.subtotal)}</strong>
           </div>
-          {result.discountAmount > 0 ? (
+          {result.discountAmount - (result.ruletaDescuento ?? 0) > 0 ? (
             <div className="summary-row discount-row">
               <span>Descuento {result.couponCode ? `(${result.couponCode})` : ""}</span>
-              <strong>-{formatMoney(result.discountAmount)}</strong>
+              <strong>-{formatMoney(result.discountAmount - (result.ruletaDescuento ?? 0))}</strong>
+            </div>
+          ) : null}
+          {(result.ruletaDescuento ?? 0) > 0 ? (
+            <div className="summary-row discount-row">
+              <span>Ruleta del día</span>
+              <strong>-{formatMoney(result.ruletaDescuento ?? 0)}</strong>
             </div>
           ) : null}
           <div className="summary-row">

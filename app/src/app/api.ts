@@ -1,13 +1,54 @@
-import type { CartItem, Category, CheckoutResult, Coupon, OrderRecord, OrderStats, Product, ProductVariant, ReturnRecord, Review, ShippingInfo, User } from "./types";
+import type { CartItem, Category, CheckoutResult, Coupon, OrderRecord, OrderStats, Product, ProductVariant, ReturnRecord, Review, RouletteCartDiscount, RouletteState, ShippingInfo, SiteSettings, User } from "./types";
 
 const API_BASE_URL = "http://localhost:8080/api";
 const API_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, "");
 export const AUTH_TOKEN_KEY = "petshop_auth_token";
 export const AUTH_USER_KEY = "petshop_auth_user";
 export const GUEST_ID_KEY = "petshop_guest_id";
+export const AUTH_REFRESH_KEY = "petshop_refresh_token";
 export const UNAUTHORIZED_EVENT = "petshop:unauthorized";
+export const TOKEN_REFRESHED_EVENT = "petshop:token-refreshed";
 
-async function request<T>(input: string, init?: (RequestInit & { skipAuthRedirect?: boolean })): Promise<T> {
+type SessionResponse = { token: string; refreshToken: string; user: User };
+
+let refreshInFlight: Promise<string | null> | null = null;
+
+/**
+ * Renueva el access token (que dura 15 minutos) con el refresh token guardado. Si varias peticiones fallan a la vez,
+ * comparten una sola renovación. Devuelve el token nuevo o null si la sesión ya no se puede renovar.
+ */
+async function refreshSession(): Promise<string | null> {
+  const refreshToken = localStorage.getItem(AUTH_REFRESH_KEY);
+  if (!refreshToken) return null;
+  if (!refreshInFlight) {
+    refreshInFlight = (async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ refreshToken }),
+        });
+        if (!response.ok) {
+          localStorage.removeItem(AUTH_REFRESH_KEY);
+          return null;
+        }
+        const session = (await response.json()) as SessionResponse;
+        localStorage.setItem(AUTH_TOKEN_KEY, session.token);
+        localStorage.setItem(AUTH_REFRESH_KEY, session.refreshToken);
+        localStorage.setItem(AUTH_USER_KEY, JSON.stringify(session.user));
+        window.dispatchEvent(new CustomEvent(TOKEN_REFRESHED_EVENT, { detail: session }));
+        return session.token;
+      } catch {
+        return null;
+      } finally {
+        refreshInFlight = null;
+      }
+    })();
+  }
+  return refreshInFlight;
+}
+
+async function request<T>(input: string, init?: (RequestInit & { skipAuthRedirect?: boolean }), retried = false): Promise<T> {
   const headers = new Headers(init?.headers ?? {});
   if (!headers.has("Content-Type") && !(init?.body instanceof FormData)) {
     headers.set("Content-Type", "application/json");
@@ -19,11 +60,21 @@ async function request<T>(input: string, init?: (RequestInit & { skipAuthRedirec
   });
 
   if (!response.ok) {
+    if (response.status === 401 && !init?.skipAuthRedirect && !retried && headers.has("X-Auth-Token")) {
+      const renewed = await refreshSession();
+      if (renewed) {
+        const retryHeaders = new Headers(init?.headers ?? {});
+        retryHeaders.set("X-Auth-Token", renewed);
+        return request<T>(input, { ...init, headers: retryHeaders }, true);
+      }
+    }
+
     const text = await response.text();
     let message = text || "Request failed";
     try {
-      const parsed = JSON.parse(text) as { error?: string };
+      const parsed = JSON.parse(text) as { error?: string; detail?: string };
       if (parsed.error) message = parsed.error;
+      else if (parsed.detail) message = parsed.detail;
     } catch {
       // not JSON, keep raw text
     }
@@ -174,23 +225,23 @@ export async function removeFromWishlist(token: string, productId: string): Prom
   });
 }
 
-export async function login(email: string, password: string): Promise<{ token: string; user: User }> {
-  return request<{ token: string; user: User }>("/auth/login", {
+export async function login(email: string, password: string): Promise<SessionResponse> {
+  return request<SessionResponse>("/auth/login", {
     method: "POST",
     body: JSON.stringify({ email, password }),
     skipAuthRedirect: true,
   });
 }
 
-export async function register(email: string, password: string, name: string): Promise<{ token: string; user: User }> {
-  return request<{ token: string; user: User }>("/auth/register", {
+export async function register(email: string, password: string, name: string): Promise<SessionResponse> {
+  return request<SessionResponse>("/auth/register", {
     method: "POST",
     body: JSON.stringify({ email, password, name }),
   });
 }
 
-export async function recoverPassword(email: string): Promise<{ resetToken: string; expiresInMinutes: number }> {
-  return request<{ resetToken: string; expiresInMinutes: number }>("/auth/recover", {
+export async function recoverPassword(email: string): Promise<{ ok: boolean; message: string; expiresInMinutes: number }> {
+  return request<{ ok: boolean; message: string; expiresInMinutes: number }>("/auth/recover", {
     method: "POST",
     body: JSON.stringify({ email }),
   });
@@ -220,12 +271,30 @@ export async function updateMyProfile(token: string, name: string): Promise<User
 }
 
 export async function changePassword(token: string, currentPassword: string, newPassword: string): Promise<{ ok: boolean }> {
-  return request<{ ok: boolean }>("/auth/change-password", {
+  const result = await request<{ ok: boolean; refreshToken?: string }>("/auth/change-password", {
     method: "POST",
     headers: { "X-Auth-Token": token },
     body: JSON.stringify({ currentPassword, newPassword }),
     skipAuthRedirect: true,
   });
+  // Al cambiar la contraseña se cierran las demás sesiones; esta sigue con un refresh token nuevo.
+  if (result.refreshToken) localStorage.setItem(AUTH_REFRESH_KEY, result.refreshToken);
+  return { ok: result.ok };
+}
+
+/** Cierra la sesión en el servidor (revoca el refresh token); si falla no importa, el cliente igual se desloguea. */
+export async function logoutSession(): Promise<void> {
+  const refreshToken = localStorage.getItem(AUTH_REFRESH_KEY);
+  if (!refreshToken) return;
+  try {
+    await fetch(`${API_BASE_URL}/auth/logout`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refreshToken }),
+    });
+  } catch {
+    // sin red: el refresh token vence solo
+  }
 }
 
 function cartHeaders(token?: string | null): Record<string, string> {
@@ -272,16 +341,52 @@ export async function decrementCartItem(token: string | null, productId: string,
   });
 }
 
-export async function checkoutCart(
+type VentaResponse = {
+  id: number;
+  estado: string;
+  estadoPago: string;
+  items: { productId: string; name: string; variant: string; variantId: number | null; quantity: number; price: number }[];
+  subtotal: number;
+  shippingCost: number;
+  discountAmount: number;
+  ruletaDescuento?: number;
+  couponCode: string | null;
+  total: number;
+};
+
+export async function createVenta(
   token: string | null,
-  shipping?: Partial<ShippingInfo>,
-  couponCode?: string | null,
+  shipping: Partial<ShippingInfo>,
+  couponCode: string | null | undefined,
+  medioPago: string,
+  idempotencyKey: string,
 ): Promise<CheckoutResult> {
-  return request<CheckoutResult>("/cart/checkout", {
+  const venta = await request<VentaResponse>("/v1/ventas", {
     method: "POST",
-    headers: cartHeaders(token),
-    body: JSON.stringify({ ...(shipping || {}), ...(couponCode ? { cupon: couponCode } : {}) }),
+    headers: { ...cartHeaders(token), "Idempotency-Key": idempotencyKey },
+    body: JSON.stringify({ ...shipping, ...(couponCode ? { cupon: couponCode } : {}), medioPago }),
   });
+
+  return {
+    ok: true,
+    items: venta.items.map((item) => ({
+      productId: item.productId,
+      name: item.name,
+      variant: item.variant,
+      variantId: item.variantId,
+      quantity: item.quantity,
+      price: item.price,
+    })),
+    subtotal: venta.subtotal,
+    shippingCost: venta.shippingCost,
+    discountAmount: venta.discountAmount,
+    ruletaDescuento: venta.ruletaDescuento ?? 0,
+    couponCode: venta.couponCode,
+    total: venta.total,
+    orderId: venta.id,
+    estado: venta.estado,
+    estadoPago: venta.estadoPago,
+  };
 }
 
 export async function validateCoupon(code: string, subtotal: number): Promise<{ code: string; discountAmount: number }> {
@@ -446,4 +551,41 @@ export async function processRefund(token: string, returnId: number): Promise<{ 
     method: "POST",
     headers: { "X-Auth-Token": token },
   });
+}
+
+export async function fetchSiteSettings(): Promise<SiteSettings> {
+  return request<SiteSettings>("/settings");
+}
+
+export async function updateSiteSettings(token: string, settings: SiteSettings): Promise<SiteSettings> {
+  return request<SiteSettings>("/settings", {
+    method: "PUT",
+    headers: { "X-Auth-Token": token },
+    body: JSON.stringify(settings),
+  });
+}
+
+export type SalchiBotAnswer = { reply: string; products: Product[]; suggestions: string[] };
+
+/** Le escribe a Salchi Bot (público): devuelve su respuesta y los productos que recomienda. */
+export async function askSalchiBot(message: string, history: string[]): Promise<SalchiBotAnswer> {
+  return request<SalchiBotAnswer>("/chat", {
+    method: "POST",
+    body: JSON.stringify({ message, history }),
+  });
+}
+
+/** Estado de la ruleta del día: los gajos y, si ya giró hoy, la categoría que le tocó. */
+export async function fetchRoulette(token?: string | null): Promise<RouletteState> {
+  return request<RouletteState>("/roulette", { headers: cartHeaders(token) });
+}
+
+/** Gira la ruleta (el sorteo lo hace el servidor; solo se puede una vez por día). */
+export async function spinRoulette(token?: string | null): Promise<RouletteState> {
+  return request<RouletteState>("/roulette/spin", { method: "POST", headers: cartHeaders(token) });
+}
+
+/** Cuánto descuenta la ruleta sobre el carrito actual. */
+export async function fetchRouletteCartDiscount(token?: string | null): Promise<RouletteCartDiscount> {
+  return request<RouletteCartDiscount>("/roulette/cart-discount", { headers: cartHeaders(token) });
 }

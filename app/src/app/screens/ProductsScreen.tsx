@@ -1,3 +1,4 @@
+import { PLACEHOLDER_IMAGE, handleImageError } from "../productImage";
 import { useEffect, useState } from "react";
 import type { Product } from "../types";
 
@@ -17,6 +18,8 @@ type Props = {
   isAdmin: boolean;
   wishlist: string[];
   onToggleWishlist: (productId: string) => void;
+  rouletteCategoryId?: string | null;
+  roulettePercent?: number;
 };
 
 const formatMoney = (value: number) =>
@@ -36,6 +39,8 @@ export function ProductsScreen({
   isAdmin,
   wishlist,
   onToggleWishlist,
+  rouletteCategoryId = null,
+  roulettePercent = 10,
 }: Props) {
   const [page, setPage] = useState(1);
 
@@ -93,10 +98,14 @@ export function ProductsScreen({
             <article key={product.id} className="product-card">
               <div className="product-image-wrap product-clickable" onClick={() => onOpenProduct(product.id)}>
                 <img
-                  src={product.imageUrl || "https://images.unsplash.com/photo-1583337130417-3346a1be7dee?auto=format&fit=crop&w=700&q=80"}
+                  src={product.imageUrl || PLACEHOLDER_IMAGE}
+                  onError={handleImageError}
                   alt={product.name}
                 />
                 {product.badge ? <span className="product-badge">{product.badge}</span> : null}
+                {rouletteCategoryId && product.categoryId === rouletteCategoryId ? (
+                  <span className="roulette-tag">🎡 -{roulettePercent}% hoy</span>
+                ) : null}
                 {!isAdmin ? (
                   <button
                     className={wishlist.includes(product.id) ? "wishlist-heart active" : "wishlist-heart"}

@@ -119,6 +119,9 @@ export type CheckoutResult = {
   couponCode: string | null;
   total: number;
   orderId: number | null;
+  estado?: string;
+  estadoPago?: string;
+  ruletaDescuento?: number;
 };
 
 export type Coupon = {
@@ -132,6 +135,26 @@ export type Coupon = {
   usesCount: number;
   expiresAt: string | null;
 };
+
+export type SiteSettings = {
+  topbarItems: string[];
+  announcementMode: "AUTO" | "CUSTOM" | "OFF";
+  announcementText: string;
+};
+
+export type RouletteCategory = { id: string; name: string; color: string };
+
+export type RouletteState = {
+  percent: number;
+  categories: RouletteCategory[];
+  spun: boolean;
+  categoryId: string | null;
+  categoryName: string | null;
+  validUntil: string | null;
+  alreadySpun?: boolean;
+};
+
+export type RouletteCartDiscount = { percent: number; amount: number; categoryId: string | null; categoryName: string | null };
 
 export type View =
   | "home"

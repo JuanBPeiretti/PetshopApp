@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import type { CartItem, ShippingInfo } from "../types";
-import { validateCoupon } from "../api";
+import { fetchRouletteCartDiscount, validateCoupon } from "../api";
+import { PLACEHOLDER_IMAGE, handleImageError } from "../productImage";
 
 type Props = {
   items: CartItem[];
-  requireShipping: boolean;
+  authToken: string | null;
+  productImages: Record<string, string>;
   onRemove: (item: CartItem) => void;
-  onCheckout: (shipping: Partial<ShippingInfo>, couponCode?: string | null) => void;
+  onCheckout: (shipping: Partial<ShippingInfo>, couponCode?: string | null, medioPago?: string) => void;
   onIncrement: (item: CartItem) => void;
   onDecrement: (item: CartItem) => void;
 };
@@ -22,17 +24,35 @@ const EMPTY_SHIPPING: ShippingInfo = {
   telefono: "",
 };
 
-export function CartScreen({ items, requireShipping, onRemove, onCheckout, onIncrement, onDecrement }: Props) {
+export function CartScreen({ items, authToken, productImages, onRemove, onCheckout, onIncrement, onDecrement }: Props) {
   const [shipping, setShipping] = useState<ShippingInfo>(EMPTY_SHIPPING);
   const [couponInput, setCouponInput] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discountAmount: number } | null>(null);
   const [couponError, setCouponError] = useState<string | null>(null);
   const [couponLoading, setCouponLoading] = useState(false);
+  const [medioPago, setMedioPago] = useState("tok_aprobado");
+  const [roulette, setRoulette] = useState<{ amount: number; categoryName: string | null }>({ amount: 0, categoryName: null });
 
   const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const shippingCost = items.length > 0 ? 1500 : 0;
   const discountAmount = appliedCoupon?.discountAmount ?? 0;
-  const total = Math.max(0, subtotal + shippingCost - discountAmount);
+  const rouletteAmount = roulette.amount;
+  const total = Math.max(0, subtotal + shippingCost - discountAmount - rouletteAmount);
+
+  // El descuento de la ruleta lo calcula el servidor sobre el carrito real (solo los productos de la categoría sorteada).
+  useEffect(() => {
+    let active = true;
+    if (items.length === 0) {
+      setRoulette({ amount: 0, categoryName: null });
+      return;
+    }
+    fetchRouletteCartDiscount(authToken)
+      .then((result) => active && setRoulette({ amount: result.amount, categoryName: result.categoryName }))
+      .catch(() => active && setRoulette({ amount: 0, categoryName: null }));
+    return () => {
+      active = false;
+    };
+  }, [items, authToken]);
 
   useEffect(() => {
     if (!appliedCoupon) return;
@@ -67,7 +87,7 @@ export function CartScreen({ items, requireShipping, onRemove, onCheckout, onInc
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onCheckout(requireShipping ? shipping : {}, appliedCoupon?.code);
+    onCheckout(shipping, appliedCoupon?.code, medioPago);
   };
 
   return (
@@ -85,7 +105,8 @@ export function CartScreen({ items, requireShipping, onRemove, onCheckout, onInc
               <div key={`${item.productId}-${item.variantId ?? item.variant}`} className="cart-item-card">
                 <div className="cart-thumb">
                   <img
-                    src="https://images.unsplash.com/photo-1583337130417-3346a1be7dee?auto=format&fit=crop&w=300&q=80"
+                    src={productImages[item.productId] || PLACEHOLDER_IMAGE}
+                    onError={handleImageError}
                     alt={item.name}
                   />
                 </div>
@@ -148,6 +169,12 @@ export function CartScreen({ items, requireShipping, onRemove, onCheckout, onInc
                 <strong>-{formatMoney(discountAmount)}</strong>
               </div>
             ) : null}
+            {rouletteAmount > 0 ? (
+              <div className="summary-row discount-row">
+                <span>Ruleta del día{roulette.categoryName ? ` (${roulette.categoryName})` : ""}</span>
+                <strong>-{formatMoney(rouletteAmount)}</strong>
+              </div>
+            ) : null}
             <div className="summary-row">
               <span>Envío</span>
               <strong>{formatMoney(shippingCost)}</strong>
@@ -158,53 +185,57 @@ export function CartScreen({ items, requireShipping, onRemove, onCheckout, onInc
             </div>
 
             <form onSubmit={handleSubmit} className="shipping-form">
-              {requireShipping ? (
-                <>
-                  <h4>Datos de envío</h4>
-                  <label>
-                    <span>Nombre y apellido</span>
-                    <input
-                      required
-                      value={shipping.nombre}
-                      onChange={(e) => setShipping({ ...shipping, nombre: e.target.value })}
-                    />
-                  </label>
-                  <label>
-                    <span>Dirección</span>
-                    <input
-                      required
-                      value={shipping.direccion}
-                      onChange={(e) => setShipping({ ...shipping, direccion: e.target.value })}
-                    />
-                  </label>
-                  <div className="shipping-form-row">
-                    <label>
-                      <span>Ciudad</span>
-                      <input
-                        required
-                        value={shipping.ciudad}
-                        onChange={(e) => setShipping({ ...shipping, ciudad: e.target.value })}
-                      />
-                    </label>
-                    <label>
-                      <span>Código postal</span>
-                      <input
-                        value={shipping.codigoPostal}
-                        onChange={(e) => setShipping({ ...shipping, codigoPostal: e.target.value })}
-                      />
-                    </label>
-                  </div>
-                  <label>
-                    <span>Teléfono (opcional)</span>
-                    <input
-                      value={shipping.telefono}
-                      onChange={(e) => setShipping({ ...shipping, telefono: e.target.value })}
-                    />
-                  </label>
-                </>
-              ) : (
-                <p className="review-login-hint">Iniciá sesión para guardar tu pedido y ver el historial.</p>
-              )}
+              <h4>Datos de envío</h4>
+              <label>
+                <span>Nombre y apellido</span>
+                <input
+                  required
+                  value={shipping.nombre}
+                  onChange={(e) => setShipping({ ...shipping, nombre: e.target.value })}
+                />
+              </label>
+              <label>
+                <span>Dirección</span>
+                <input
+                  required
+                  value={shipping.direccion}
+                  onChange={(e) => setShipping({ ...shipping, direccion: e.target.value })}
+                />
+              </label>
+              <div className="shipping-form-row">
+                <label>
+                  <span>Ciudad</span>
+                  <input
+                    required
+                    value={shipping.ciudad}
+                    onChange={(e) => setShipping({ ...shipping, ciudad: e.target.value })}
+                  />
+                </label>
+                <label>
+                  <span>Código postal</span>
+                  <input
+                    value={shipping.codigoPostal}
+                    onChange={(e) => setShipping({ ...shipping, codigoPostal: e.target.value })}
+                  />
+                </label>
+              </div>
+              <label>
+                <span>Teléfono (opcional)</span>
+                <input
+                  value={shipping.telefono}
+                  onChange={(e) => setShipping({ ...shipping, telefono: e.target.value })}
+                />
+              </label>
+              <label>
+                <span>Medio de pago (simulado)</span>
+                <select value={medioPago} onChange={(e) => setMedioPago(e.target.value)}>
+                  <option value="tok_aprobado">Tarjeta de prueba: aprobada</option>
+                  <option value="tok_rechazado">Tarjeta de prueba: rechazada</option>
+                  <option value="tok_invalido">Tarjeta de prueba: datos inválidos</option>
+                  <option value="tok_demora">Pasarela lenta: queda pendiente y se confirma</option>
+                  <option value="tok_caido">Pasarela caída: queda pendiente y se cancela</option>
+                </select>
+              </label>
               <button className="primary-btn block" type="submit">Finalizar compra</button>
             </form>
           </aside>

@@ -1,4 +1,6 @@
-import type { Category, Product, User } from "../types";
+import { PLACEHOLDER_IMAGE, handleImageError } from "../productImage";
+import type { Category, Product, RouletteState, User } from "../types";
+import { SalchiAvatar } from "./SalchiAvatar";
 
 type Props = {
   categories: Category[];
@@ -9,6 +11,8 @@ type Props = {
   onOpenProduct: (id: string) => void;
   wishlist: string[];
   onToggleWishlist: (productId: string) => void;
+  roulette?: RouletteState | null;
+  onOpenRoulette?: () => void;
 };
 
 const formatMoney = (value: number) =>
@@ -23,6 +27,8 @@ export function HomeScreen({
   onOpenProduct,
   wishlist,
   onToggleWishlist,
+  roulette = null,
+  onOpenRoulette,
 }: Props) {
   const featured = products.slice(0, 4);
 
@@ -63,6 +69,23 @@ export function HomeScreen({
         </div>
       </section>
 
+      {roulette && onOpenRoulette ? (
+        <section className="roulette-banner">
+          <SalchiAvatar headset={false} className="roulette-banner-dog" />
+          <div className="roulette-banner-text">
+            <strong>Descuento del día</strong>
+            <span>
+              {roulette.spun
+                ? `Hoy te tocó ${roulette.percent}% OFF en ${roulette.categoryName}`
+                : `Girá la ruleta y ganá ${roulette.percent}% OFF en una categoría`}
+            </span>
+          </div>
+          <button className="primary-btn" onClick={onOpenRoulette}>
+            {roulette.spun ? "Ver mi descuento" : "¡Girar!"}
+          </button>
+        </section>
+      ) : null}
+
       <section className="section-block">
         <div className="section-header">
           <h2>Categorías populares</h2>
@@ -95,7 +118,7 @@ export function HomeScreen({
           {featured.map((product) => (
             <article key={product.id} className="product-card">
               <div className="product-image-wrap product-clickable" onClick={() => onOpenProduct(product.id)}>
-                <img src={product.imageUrl || "https://images.unsplash.com/photo-1583337130417-3346a1be7dee?auto=format&fit=crop&w=700&q=80"} alt={product.name} />
+                <img src={product.imageUrl || PLACEHOLDER_IMAGE} onError={handleImageError} alt={product.name} />
                 {product.badge && <span className="product-badge">{product.badge}</span>}
                 {currentUser?.role !== "ADMIN" ? (
                   <button
