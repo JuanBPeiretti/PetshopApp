@@ -2,13 +2,37 @@
 
 Cada punto de la consigna, qué mostrar y dónde está en el código. Todo se muestra funcionando, no con capturas.
 
-## Antes de empezar (5 minutos antes del turno)
+## Antes de empezar (10 minutos antes del turno)
+
+### Opción A: sin Docker (la que se usa en la demo de esta entrega)
+Requisitos: Java 21 o superior, Node 22 o superior y MySQL en `localhost:3306` (el servicio `MySQL80` arranca solo con Windows;
+la base y el usuario de desarrollo los crea `setup-petshop-db.sql` la primera vez).
+
+Abrir **tres terminales** (PowerShell) en la carpeta del proyecto:
+
+```powershell
+# Terminal 1: backend (puerto 8080). Esperar la línea "Started AppApplication".
+cd app
+.\mvnw.cmd spring-boot:run
+
+# Terminal 2: tienda (puerto 5173)
+cd app\src\app
+npm install        # solo la primera vez
+npm run dev
+
+# Terminal 3: libre, para los comandos de la demo (curl)
+```
+Los mensajes de la cola (`[COLA ventas.confirmadas] ...`) se ven en la Terminal 1.
+
+### Opción B: con Docker (un solo comando; para la entrega final)
 ```bash
 docker compose up --build        # desde la raíz; la primera vez tarda unos minutos
 ```
+Requiere [Docker Desktop](https://docs.docker.com/desktop/setup/install/windows-install/). Los mensajes se ven con `docker compose logs -f backend`.
+
+### En ambas opciones
 - Tienda: <http://localhost:5173> · API: <http://localhost:8080/api> · Swagger: <http://localhost:8080/swagger-ui.html>
 - Usuarios de desarrollo: `admin@petshop.com` / `admin123` (administrador) y `cliente@ejemplo.com` / `password` (cliente).
-- Tener abiertas dos terminales: una con `docker compose logs -f backend` y otra para los `curl`.
 
 ## 1. Componentes en capas y primer flujo de punta a punta (3 min)
 - Mostrar [ADR 0001](../adr/0001-arquitectura-en-capas.md): `controller → service → repository → model`.
@@ -16,29 +40,26 @@ docker compose up --build        # desde la raíz; la primera vez tarda unos min
   Resultado: pantalla «Compra confirmada».
 - En la terminal de logs aparece el evento de la venta en la cola (`[COLA ventas.confirmadas] VentaConfirmada ventaId=...`): eso es la **mensajería funcionando**.
 
-## 2. Patrón State con 409 ante una transición inválida (3 min) — [ADR 0003](../adr/0003-patron-state-en-la-venta.md)
-```bash
-TOKEN=$(curl -s -X POST localhost:8080/api/auth/login -H 'Content-Type: application/json' \
-  -d '{"email":"admin@petshop.com","password":"admin123"}' | jq -r .token)
-ID=$(curl -s localhost:8080/api/orders -H "X-Auth-Token: $TOKEN" | jq '[.[]|select(.estado=="COMPLETADA")][0].id')
-
-# COMPLETADA -> ENVIADA: permitido
-curl -i -X PATCH localhost:8080/api/v1/ventas/$ID -H "X-Auth-Token: $TOKEN" -H 'Content-Type: application/json' -d '{"estado":"ENVIADA"}'
-# ENVIADA -> ENVIADA y ENVIADA -> CANCELADA: 409 Conflict (Problem Details)
-curl -i -X PATCH localhost:8080/api/v1/ventas/$ID -H "X-Auth-Token: $TOKEN" -H 'Content-Type: application/json' -d '{"estado":"ENVIADA"}'
-curl -i -X PATCH localhost:8080/api/v1/ventas/$ID -H "X-Auth-Token: $TOKEN" -H 'Content-Type: application/json' -d '{"estado":"CANCELADA"}'
+## 2 y 3. Patrón State (409) y seguridad por rol (401/403) — [ADR 0003](../adr/0003-patron-state-en-la-venta.md) y [ADR 0011](../adr/0011-jwt-y-control-de-acceso-por-rol.md) (5 min)
+En la Terminal 3, desde la carpeta `app`:
+```powershell
+python tests-api\demo_entrega2.py
 ```
-Se espera: `200`, luego `409` con `Content-Type: application/problem+json` y `type: urn:petshop:problem:transicion-invalida`.
+Hace las 10 comprobaciones y muestra cada una con su código HTTP (necesita al menos un pedido `COMPLETADA`: si no hay, hacer una compra en la tienda con la tarjeta de prueba aprobada):
+
+| Comprobación | Resultado esperado |
+| --- | --- |
+| `GET /api/orders` sin sesión, con token alterado | **401** |
+| `GET /api/orders` con la sesión de un cliente | **403** |
+| `GET /api/orders` con la sesión del administrador | **200** |
+| Venta `COMPLETADA` → `ENVIADA` | **200** |
+| `ENVIADA` → `ENVIADA` y `ENVIADA` → `CANCELADA` | **409** `application/problem+json`, `urn:petshop:problem:transicion-invalida` |
+| Estado que no existe | **422** |
+| La ruta vieja del panel (`PUT /api/orders/{id}/status`) con una transición inválida | **409** (antes aceptaba cualquier cambio) |
+
 - En el panel de administrador, el desplegable de un pedido enviado o cancelado dice «Sin cambios posibles».
 - Código: `model/EstadoVenta.java` (la tabla de transiciones) y `EstadoVentaTest` (12 combinaciones: 4 permitidas y 8 rechazadas).
-
-## 3. Seguridad base: JWT y control de acceso por rol (2 min) — [ADR 0011](../adr/0011-jwt-y-control-de-acceso-por-rol.md)
-```bash
-curl -i localhost:8080/api/orders                                                          # 401: sin sesión
-CLI=$(curl -s -X POST localhost:8080/api/auth/login -H 'Content-Type: application/json' -d '{"email":"cliente@ejemplo.com","password":"password"}' | jq -r .token)
-curl -i localhost:8080/api/orders -H "X-Auth-Token: $CLI"                                  # 403: es cliente, no administrador
-curl -i localhost:8080/api/orders -H "X-Auth-Token: $TOKEN"                                # 200: administrador
-```
+- El script consume un pedido `COMPLETADA` cada vez que se corre (lo pasa a `ENVIADA`): para repetir la demo, hacer otra compra.
 
 ## 4. Patrones implementados, cada uno con su ADR (2 min)
 | Patrón | Dónde está | ADR |
@@ -50,8 +71,9 @@ curl -i localhost:8080/api/orders -H "X-Auth-Token: $TOKEN"                     
 | Consumidor idempotente + DLQ | `service/VentaEventListener`, `DlqService` | [0007](../adr/0007-consumidor-idempotente-y-dlq.md) |
 
 ## 5. Primeros tests unitarios (1 min)
-```bash
-cd app && ./mvnw test          # 460+ pruebas; la cobertura queda en target/site/jacoco/index.html
+```powershell
+cd app
+.\mvnw.cmd test              # 490+ pruebas; la cobertura queda en target\site\jacoco\index.html (en Linux o Mac: ./mvnw test)
 ```
 El CI los corre en cada push (GitHub Actions) y el resultado está en el Pull Request.
 
