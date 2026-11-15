@@ -9,6 +9,11 @@ import org.springframework.web.bind.annotation.*;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import com.petshop.app.config.AdminOnly;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 
 @RestController
 @RequestMapping("/api/coupons")
@@ -22,19 +27,22 @@ public class CouponController {
         this.adminGuard = adminGuard;
     }
 
+    @ApiResponse(responseCode = "200", description = "Los cupones", content = @Content(array = @ArraySchema(schema = @Schema(implementation = com.petshop.app.model.Coupon.class))))
+    @AdminOnly
     @GetMapping
     public ResponseEntity<?> list(@RequestHeader(value = "X-Auth-Token", required = false) String token) {
         if (!adminGuard.isAdmin(token)) {
-            return ResponseEntity.status(403).body(Map.of("error", "Requiere permisos de administrador"));
+            return adminGuard.denied(token);
         }
         return ResponseEntity.ok(couponRepository.findAll());
     }
 
+    @AdminOnly
     @PostMapping
     public ResponseEntity<?> create(@RequestHeader(value = "X-Auth-Token", required = false) String token,
                                      @RequestBody Coupon coupon) {
         if (!adminGuard.isAdmin(token)) {
-            return ResponseEntity.status(403).body(Map.of("error", "Requiere permisos de administrador"));
+            return adminGuard.denied(token);
         }
 
         ResponseEntity<?> validationError = validate(coupon);
@@ -53,12 +61,13 @@ public class CouponController {
         return ResponseEntity.ok(coupon);
     }
 
+    @AdminOnly
     @PutMapping("/{id}")
     public ResponseEntity<?> update(@RequestHeader(value = "X-Auth-Token", required = false) String token,
                                      @PathVariable Long id,
                                      @RequestBody Coupon coupon) {
         if (!adminGuard.isAdmin(token)) {
-            return ResponseEntity.status(403).body(Map.of("error", "Requiere permisos de administrador"));
+            return adminGuard.denied(token);
         }
 
         Coupon existing = couponRepository.findById(id).orElse(null);
@@ -88,11 +97,12 @@ public class CouponController {
         return ResponseEntity.ok(existing);
     }
 
+    @AdminOnly
     @DeleteMapping("/{id}")
     public ResponseEntity<?> delete(@RequestHeader(value = "X-Auth-Token", required = false) String token,
                                      @PathVariable Long id) {
         if (!adminGuard.isAdmin(token)) {
-            return ResponseEntity.status(403).body(Map.of("error", "Requiere permisos de administrador"));
+            return adminGuard.denied(token);
         }
         if (!couponRepository.existsById(id)) {
             return ResponseEntity.badRequest().body(Map.of("error", "Cupón no encontrado"));

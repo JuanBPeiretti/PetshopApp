@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { OrderRecord, ReturnRecord } from "../types";
 import { fetchMyOrders, fetchMyReturns, requestReturn } from "../api";
+import { statusTone } from "../components/statusTone";
 
 type Props = {
   authToken: string;
@@ -141,7 +142,12 @@ export function MyOrdersScreen({ authToken }: Props) {
                       <span className="my-order-date">{new Date(order.fecha).toLocaleString("es-AR")}</span>
                     </div>
                     <div className="my-order-header-right">
-                      <span className="status-badge">{order.estado}</span>
+                      <span className={`status-badge tone-${statusTone(order.estado)}`}>{order.estado}</span>
+                      {order.paymentUrl ? (
+                        <a className="primary-btn pay-now-btn" href={order.paymentUrl}>
+                          Pagar ahora
+                        </a>
+                      ) : null}
                       <strong>{formatMoney(order.total)}</strong>
                     </div>
                   </div>
@@ -163,7 +169,7 @@ export function MyOrdersScreen({ authToken }: Props) {
                             <td>{item.productId}</td>
                             <td>{item.variant || "—"}</td>
                             <td>{item.quantity}</td>
-                            <td>{formatMoney(item.price)}</td>
+                            <td>{item.price === 0 ? "Gratis (regalo)" : formatMoney(item.price)}</td>
                             <td>
                               <button
                                 className="secondary-btn"
@@ -253,7 +259,7 @@ export function MyOrdersScreen({ authToken }: Props) {
                       <td>{r.motivo}</td>
                       <td>{new Date(r.requestedAt).toLocaleString("es-AR")}</td>
                       <td>
-                        <span className="status-badge">{r.estado}</span>
+                        <span className={`status-badge tone-${statusTone(r.estado)}`}>{r.estado}</span>
                       </td>
                     </tr>
                   ))}

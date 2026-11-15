@@ -16,6 +16,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import com.petshop.app.config.AdminOnly;
 
 @RestController
 @RequestMapping("/api/products")
@@ -91,16 +92,46 @@ public class ProductController {
             return ResponseEntity.status(404).body(Map.of("error", "Producto no encontrado"));
         }
         product.hasVariants = !productVariantRepository.findByProductId(id).isEmpty();
-        return ResponseEntity.ok(product);
+        return ResponseEntity.ok().eTag(etag(product)).body(product);
     }
 
+    /** Un producto sin nombre, sin precio o sin categoría rompe la tienda: se rechaza con 400 antes de guardarlo. */
+    private static ResponseEntity<?> validate(Product p) {
+        String error = null;
+        if (p.name == null || p.name.isBlank()) {
+            error = "El nombre es obligatorio";
+        } else if (p.name.length() > 150) {
+            error = "El nombre no puede superar los 150 caracteres";
+        } else if (!(p.price > 0) || Double.isInfinite(p.price)) {
+            error = "El precio debe ser mayor a 0";
+        } else if (p.stock < 0) {
+            error = "El stock no puede ser negativo";
+        } else if (p.categoryId == null || p.categoryId.isBlank()) {
+            error = "La categoría es obligatoria";
+        } else if (p.rating < 0 || p.rating > 5) {
+            error = "La calificación va de 0 a 5";
+        }
+        return error == null ? null : ResponseEntity.badRequest().body(Map.of("error", error));
+    }
+
+    /** Huella de los datos de un producto que el administrador puede editar. */
+    private static String etag(Product product) {
+        return ETags.of(product.id, product.name, product.brand, product.price, product.oldPrice, product.rating,
+                product.imageUrl, product.badge, product.categoryId, product.stock);
+    }
+
+    @AdminOnly
     @PostMapping
     public ResponseEntity<?> create(@RequestHeader(value = "X-Auth-Token", required = false) String token,
                                      @RequestBody Product product) {
         if (!adminGuard.isAdmin(token)) {
-            return ResponseEntity.status(403).body(Map.of("error", "Requiere permisos de administrador"));
+            return adminGuard.denied(token);
         }
 
+        ResponseEntity<?> invalid = validate(product);
+        if (invalid != null) {
+            return invalid;
+        }
         if (product.id == null || product.id.isBlank()) {
             product.id = UUID.randomUUID().toString();
         }
@@ -108,28 +139,41 @@ public class ProductController {
         return ResponseEntity.ok(product);
     }
 
+    @AdminOnly
     @PutMapping("/{id}")
     public ResponseEntity<?> update(@RequestHeader(value = "X-Auth-Token", required = false) String token,
+                                     @RequestHeader(value = "If-Match", required = false) String ifMatch,
                                      @PathVariable String id,
                                      @RequestBody Product product) {
         if (!adminGuard.isAdmin(token)) {
-            return ResponseEntity.status(403).body(Map.of("error", "Requiere permisos de administrador"));
+            return adminGuard.denied(token);
         }
 
-        if (!productRepository.existsById(id)) {
+        Product current = productRepository.findById(id).orElse(null);
+        if (current == null) {
             return ResponseEntity.badRequest().body(Map.of("error", "Producto no encontrado"));
+        }
+        ResponseEntity<?> invalid = validate(product);
+        if (invalid != null) {
+            return invalid;
+        }
+        // Si otra persona lo modificó después de que este administrador lo leyó, no se pisa su cambio (412)
+        if (ETags.stale(ifMatch, etag(current))) {
+            return Problems.of(412, "precondicion-fallida", "Precondición fallida",
+                    "El producto cambió desde que lo leíste (ETag desactualizado): volvé a pedirlo y reintentá.");
         }
 
         product.id = id;
         productRepository.save(product);
-        return ResponseEntity.ok(product);
+        return ResponseEntity.ok().eTag(etag(product)).body(product);
     }
 
+    @AdminOnly
     @DeleteMapping("/{id}")
     public ResponseEntity<?> delete(@RequestHeader(value = "X-Auth-Token", required = false) String token,
                                      @PathVariable String id) {
         if (!adminGuard.isAdmin(token)) {
-            return ResponseEntity.status(403).body(Map.of("error", "Requiere permisos de administrador"));
+            return adminGuard.denied(token);
         }
 
         if (!productRepository.existsById(id)) {

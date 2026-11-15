@@ -12,6 +12,7 @@ import com.petshop.app.repository.ProductRepository;
 import com.petshop.app.repository.ProductVariantRepository;
 import com.petshop.app.service.InMemoryStore;
 import com.petshop.app.service.JwtUtil;
+import com.petshop.app.service.Pricing;
 import com.petshop.app.service.NotificationService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -21,6 +22,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 
 @RestController
 @RequestMapping("/api/cart")
@@ -89,6 +94,7 @@ public class CartController {
         return token != null && !token.isBlank() && jwtUtil.isTokenValid(token) && "ADMIN".equals(jwtUtil.extractRole(token));
     }
 
+    @ApiResponse(responseCode = "200", description = "Los productos del carrito", content = @Content(array = @ArraySchema(schema = @Schema(implementation = com.petshop.app.model.CartItem.class))))
     @GetMapping
     public ResponseEntity<?> getCart(@RequestHeader(value = "X-Auth-Token", required = false) String token,
                                       @RequestHeader(value = "X-Guest-Id", required = false) String guestId) {
@@ -96,7 +102,7 @@ public class CartController {
         List<CartItem> items = isGuest(userToken)
                 ? store.carts.getOrDefault(userToken, List.of())
                 : cartItemRepository.findByUserId(userToken);
-        return ResponseEntity.ok(items);
+        return ResponseEntity.ok(withCurrentPrices(items, !isGuest(userToken)));
     }
 
     @PostMapping("/add")
@@ -131,7 +137,7 @@ public class CartController {
 
         item.name = item.name == null || item.name.isBlank() ? product.name : item.name;
         item.variant = item.variant == null || item.variant.isBlank() ? product.categoryId : item.variant;
-        item.price = product.price;
+        item.price = Pricing.effectivePrice(product);
         item.quantity = Math.max(1, item.quantity);
 
         final int finalStockAvailable = stockAvailable;
@@ -144,6 +150,7 @@ public class CartController {
                         return ResponseEntity.badRequest().body(Map.of("error", "Stock insuficiente. Disponible: " + finalStockAvailable));
                     }
                     existing.quantity += item.quantity;
+                    existing.price = item.price;
                     return ResponseEntity.ok(cart);
                 }
             }
@@ -161,6 +168,7 @@ public class CartController {
                     return ResponseEntity.badRequest().body(Map.of("error", "Stock insuficiente. Disponible: " + finalStockAvailable));
                 }
                 existing.quantity += item.quantity;
+                existing.price = item.price;
                 cartItemRepository.save(existing);
                 return ResponseEntity.ok(cartItemRepository.findByUserId(userToken));
             }
@@ -216,7 +224,7 @@ public class CartController {
                 cart.remove(item);
             }
             store.carts.put(userToken, cart);
-            return ResponseEntity.ok(cart);
+            return ResponseEntity.ok(withCurrentPrices(cart, false));
         }
 
         List<CartItem> cart = cartItemRepository.findByUserId(userToken);
@@ -240,7 +248,26 @@ public class CartController {
         } else {
             cartItemRepository.save(item);
         }
-        return ResponseEntity.ok(cartItemRepository.findByUserId(userToken));
+        return ResponseEntity.ok(withCurrentPrices(cartItemRepository.findByUserId(userToken), true));
+    }
+
+    /**
+     * Pone al día el precio de cada línea con el precio vigente del producto (promoción incluida): si el admin
+     * cambió o quitó una promoción después de agregar el producto, el carrito muestra lo que realmente se va a cobrar.
+     */
+    private List<CartItem> withCurrentPrices(List<CartItem> items, boolean persist) {
+        for (CartItem item : items) {
+            productRepository.findById(item.productId).ifPresent(product -> {
+                double current = Pricing.effectivePrice(product);
+                if (item.price != current) {
+                    item.price = current;
+                    if (persist) {
+                        cartItemRepository.save(item);
+                    }
+                }
+            });
+        }
+        return items;
     }
 
     @PostMapping("/remove")
@@ -268,115 +295,4 @@ public class CartController {
         return ResponseEntity.ok(cartItemRepository.findByUserId(userToken));
     }
 
-    @PostMapping("/checkout")
-    public ResponseEntity<?> checkout(@RequestHeader(value = "X-Auth-Token", required = false) String token,
-                                       @RequestHeader(value = "X-Guest-Id", required = false) String guestId,
-                                       @RequestBody(required = false) Map<String, String> body) {
-        if (isAdminToken(token)) {
-            return ResponseEntity.status(403).body(Map.of("error", "Los administradores no pueden usar el carrito"));
-        }
-
-        String userToken = resolveToken(token, guestId);
-        boolean guest = isGuest(userToken);
-
-        List<CartItem> purchasedItems = guest
-                ? store.carts.getOrDefault(userToken, new ArrayList<>())
-                : cartItemRepository.findByUserId(userToken);
-
-        for (CartItem item : purchasedItems) {
-            Product product = productRepository.findById(item.productId).orElse(null);
-            if (product == null || availableStock(product, item.variantId) < item.quantity) {
-                String name = product != null ? product.name : item.productId;
-                return ResponseEntity.badRequest().body(Map.of("error", "Stock insuficiente para " + name));
-            }
-        }
-
-        Map<String, String> shipping = body != null ? body : Map.of();
-        String shippingName = shipping.getOrDefault("nombre", "").trim();
-        String shippingAddress = shipping.getOrDefault("direccion", "").trim();
-        String shippingCity = shipping.getOrDefault("ciudad", "").trim();
-        String shippingPostalCode = shipping.getOrDefault("codigoPostal", "").trim();
-        String shippingPhone = shipping.getOrDefault("telefono", "").trim();
-
-        if (!guest && !purchasedItems.isEmpty()
-                && (shippingName.isEmpty() || shippingAddress.isEmpty() || shippingCity.isEmpty())) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Completa los datos de envío (nombre, dirección y ciudad)"));
-        }
-
-        for (CartItem item : purchasedItems) {
-            Product product = productRepository.findById(item.productId).orElse(null);
-            product.stock -= item.quantity;
-            productRepository.save(product);
-            if (item.variantId != null) {
-                ProductVariant variant = variantRepository.findById(item.variantId).orElse(null);
-                if (variant != null) {
-                    variant.stock -= item.quantity;
-                    variantRepository.save(variant);
-                }
-            }
-        }
-
-        double subtotal = purchasedItems.stream().mapToDouble(i -> i.price * i.quantity).sum();
-        double shippingCost = purchasedItems.isEmpty() ? 0 : SHIPPING_COST;
-
-        String couponCode = shipping.getOrDefault("cupon", "").trim();
-        double discountAmount = 0;
-        Coupon appliedCoupon = null;
-        if (!purchasedItems.isEmpty() && !couponCode.isBlank()) {
-            appliedCoupon = couponRepository.findByCodeIgnoreCase(couponCode).orElse(null);
-            if (appliedCoupon == null || !appliedCoupon.active || appliedCoupon.isExpired()
-                    || !appliedCoupon.hasUsesLeft() || subtotal < appliedCoupon.minPurchase) {
-                return ResponseEntity.badRequest().body(Map.of("error", "El cupón ya no es válido"));
-            }
-            discountAmount = appliedCoupon.computeDiscount(subtotal);
-        }
-
-        double total = subtotal + shippingCost - discountAmount;
-        Long orderId = null;
-
-        if (!purchasedItems.isEmpty()) {
-            List<Order.OrderItem> orderItems = purchasedItems.stream()
-                    .map(i -> new Order.OrderItem(i.productId, i.quantity, i.price, i.variant, i.variantId))
-                    .toList();
-            Order order = new Order(userToken, Instant.now(), orderItems, total, "COMPLETADA");
-            order.subtotal = subtotal;
-            order.shippingCost = shippingCost;
-            order.discountAmount = discountAmount;
-            order.couponCode = appliedCoupon != null ? appliedCoupon.code : null;
-            order.shippingName = shippingName;
-            order.shippingAddress = shippingAddress;
-            order.shippingCity = shippingCity;
-            order.shippingPostalCode = shippingPostalCode;
-            order.shippingPhone = shippingPhone;
-            orderRepository.save(order);
-            orderId = order.id;
-
-            if (appliedCoupon != null) {
-                appliedCoupon.usesCount += 1;
-                couponRepository.save(appliedCoupon);
-            }
-
-            if (!guest) {
-                String email = jwtUtil.extractEmail(token);
-                notificationService.notify(email, "Tu compra de " + purchasedItems.size() + " producto(s) se realizó con éxito.");
-            }
-        }
-
-        if (guest) {
-            store.carts.remove(userToken);
-        } else {
-            cartItemRepository.deleteAll(purchasedItems);
-        }
-
-        Map<String, Object> response = new java.util.HashMap<>();
-        response.put("ok", true);
-        response.put("items", purchasedItems);
-        response.put("subtotal", subtotal);
-        response.put("shippingCost", shippingCost);
-        response.put("discountAmount", discountAmount);
-        response.put("couponCode", appliedCoupon != null ? appliedCoupon.code : null);
-        response.put("total", total);
-        response.put("orderId", orderId);
-        return ResponseEntity.ok(response);
-    }
 }

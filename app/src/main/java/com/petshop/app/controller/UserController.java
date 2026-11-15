@@ -5,11 +5,17 @@ import com.petshop.app.model.User;
 import com.petshop.app.repository.UserRepository;
 import com.petshop.app.service.AdminGuard;
 import com.petshop.app.service.JwtUtil;
+import com.petshop.app.service.RefreshTokenService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
+import com.petshop.app.config.AdminOnly;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 
 @RestController
 @RequestMapping("/api/users")
@@ -18,29 +24,35 @@ public class UserController {
     private final UserRepository userRepository;
     private final JwtUtil jwtUtil;
     private final AdminGuard adminGuard;
+    private final RefreshTokenService refreshTokenService;
 
-    public UserController(UserRepository userRepository, JwtUtil jwtUtil, AdminGuard adminGuard) {
+    public UserController(UserRepository userRepository, JwtUtil jwtUtil, AdminGuard adminGuard,
+                          RefreshTokenService refreshTokenService) {
         this.userRepository = userRepository;
         this.jwtUtil = jwtUtil;
         this.adminGuard = adminGuard;
+        this.refreshTokenService = refreshTokenService;
     }
 
+    @ApiResponse(responseCode = "200", description = "Los usuarios", content = @Content(array = @ArraySchema(schema = @Schema(implementation = com.petshop.app.dto.UserDTO.class))))
+    @AdminOnly
     @GetMapping
     public ResponseEntity<?> list(@RequestHeader(value = "X-Auth-Token", required = false) String token) {
         if (!adminGuard.isAdmin(token)) {
-            return ResponseEntity.status(403).body(Map.of("error", "Requiere permisos de administrador"));
+            return adminGuard.denied(token);
         }
 
         List<UserDTO> users = userRepository.findAll().stream().map(UserDTO::fromUser).toList();
         return ResponseEntity.ok(users);
     }
 
+    @AdminOnly
     @PatchMapping("/{id}/role")
     public ResponseEntity<?> updateRole(@RequestHeader(value = "X-Auth-Token", required = false) String token,
                                          @PathVariable String id,
                                          @RequestBody Map<String, String> body) {
         if (!adminGuard.isAdmin(token)) {
-            return ResponseEntity.status(403).body(Map.of("error", "Requiere permisos de administrador"));
+            return adminGuard.denied(token);
         }
 
         String nuevoRol = body.get("role");
@@ -59,15 +71,18 @@ public class UserController {
 
         user.role = nuevoRol;
         userRepository.save(user);
+        // Fuerza a renovar la sesión: el nuevo rol se aplica en cuanto vence el access token (máx. 15 min).
+        refreshTokenService.revokeAll(user.id);
         return ResponseEntity.ok(UserDTO.fromUser(user));
     }
 
+    @AdminOnly
     @PatchMapping("/{id}/status")
     public ResponseEntity<?> updateStatus(@RequestHeader(value = "X-Auth-Token", required = false) String token,
                                            @PathVariable String id,
                                            @RequestBody Map<String, Boolean> body) {
         if (!adminGuard.isAdmin(token)) {
-            return ResponseEntity.status(403).body(Map.of("error", "Requiere permisos de administrador"));
+            return adminGuard.denied(token);
         }
 
         Boolean active = body.get("active");
@@ -86,6 +101,9 @@ public class UserController {
 
         user.active = active;
         userRepository.save(user);
+        if (!active) {
+            refreshTokenService.revokeAll(user.id);
+        }
         return ResponseEntity.ok(UserDTO.fromUser(user));
     }
 }

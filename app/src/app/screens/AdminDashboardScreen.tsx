@@ -10,7 +10,11 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { Category, Coupon, OrderRecord, OrderStats, Product, ProductVariant, ReturnRecord, User } from "../types";
+import type { CartPromos, Category, Faq, Coupon, OrderRecord, OrderStats, Product, ProductVariant, ReturnRecord, SiteSettings, User } from "../types";
+import { AnnouncementSettings } from "./AnnouncementSettings";
+import { CartPromosSettings } from "./CartPromosSettings";
+import { FaqSettings } from "./FaqSettings";
+import { ShippingZonesSettings } from "./ShippingZonesSettings";
 import {
   createCategory,
   createCoupon,
@@ -39,16 +43,23 @@ import {
   updateUserStatus,
   uploadImage,
 } from "../api";
+import { statusTone } from "../components/statusTone";
 
 type Props = {
   authToken: string;
   categories: Category[];
   currentUserId: string;
+  siteSettings: SiteSettings;
+  onSiteSettingsChange: (settings: SiteSettings) => void;
+  cartPromos: CartPromos;
+  onCartPromosChange: (promos: CartPromos) => void;
+  faq: Faq[];
+  onFaqChange: (items: Faq[]) => void;
 };
 
-type Tab = "stats" | "orders" | "products" | "categories" | "returns" | "users" | "coupons";
+type Tab = "stats" | "orders" | "products" | "categories" | "returns" | "users" | "coupons" | "announcements" | "cartpromos" | "faq";
 
-const EMPTY_CATEGORY_FORM = { id: "", name: "", color: "#f97316" };
+const EMPTY_CATEGORY_FORM = { id: "", name: "", color: "#65b9e9" };
 
 const EMPTY_COUPON_FORM = {
   code: "",
@@ -62,6 +73,21 @@ const EMPTY_COUPON_FORM = {
 
 const formatMoney = (value: number) =>
   new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(value);
+
+const PROMO_TYPES = [
+  "2x1",
+  "3x2",
+  "3x1",
+  "2do al 50%",
+  "10% OFF",
+  "15% OFF",
+  "20% OFF",
+  "25% OFF",
+  "30% OFF",
+  "40% OFF",
+  "50% OFF",
+  "Envío gratis",
+];
 
 const EMPTY_VARIANT_FORM = { talle: "", color: "", stock: "", imageUrl: "" };
 
@@ -80,7 +106,13 @@ const EMPTY_PRODUCT_FORM = {
   tipoPromocion: "",
 };
 
-export function AdminDashboardScreen({ authToken, categories, currentUserId }: Props) {
+/** Estados a los que puede pasar un pedido (espejo de la máquina de estados del backend, EstadoVenta): ENVIADA y CANCELADA son finales. */
+const NEXT_ORDER_STATES: Record<string, string[]> = {
+  PAGO_PENDIENTE: ["CANCELADA"],
+  COMPLETADA: ["ENVIADA", "CANCELADA"],
+};
+
+export function AdminDashboardScreen({ authToken, categories, currentUserId, siteSettings, onSiteSettingsChange, cartPromos, onCartPromosChange, faq, onFaqChange }: Props) {
   const [tab, setTab] = useState<Tab>("stats");
 
   const [users, setUsers] = useState<User[]>([]);
@@ -243,6 +275,18 @@ export function AdminDashboardScreen({ authToken, categories, currentUserId }: P
     setEditingCouponId(null);
     setCouponForm(EMPTY_COUPON_FORM);
     setCouponError(null);
+  };
+
+  // Al elegir "N% OFF" y no haber precio promocional, lo calcula a partir del precio (se puede editar después).
+  const handlePromoTypeChange = (tipoPromocion: string) => {
+    const percent = /^(\d+)% OFF$/.exec(tipoPromocion);
+    const price = Number(productForm.price);
+    if (percent && !productForm.precioPromocional && price > 0) {
+      const discounted = Math.round(price * (1 - Number(percent[1]) / 100) * 100) / 100;
+      setProductForm({ ...productForm, tipoPromocion, precioPromocional: String(discounted) });
+      return;
+    }
+    setProductForm({ ...productForm, tipoPromocion });
   };
 
   const handleCouponSubmit = async (e: React.FormEvent) => {
@@ -610,7 +654,7 @@ export function AdminDashboardScreen({ authToken, categories, currentUserId }: P
 
   const startEditCategory = (category: Category) => {
     setEditingCategoryId(category.id);
-    setCategoryForm({ id: category.id, name: category.name, color: category.color || "#f97316" });
+    setCategoryForm({ id: category.id, name: category.name, color: category.color || "#65b9e9" });
     setCategoryError(null);
   };
 
@@ -712,6 +756,15 @@ export function AdminDashboardScreen({ authToken, categories, currentUserId }: P
         <button className={tab === "coupons" ? "admin-tab active" : "admin-tab"} onClick={() => setTab("coupons")}>
           Cupones
         </button>
+        <button className={tab === "announcements" ? "admin-tab active" : "admin-tab"} onClick={() => setTab("announcements")}>
+          Anuncios
+        </button>
+        <button className={tab === "cartpromos" ? "admin-tab active" : "admin-tab"} onClick={() => setTab("cartpromos")}>
+          Envío y regalo
+        </button>
+        <button className={tab === "faq" ? "admin-tab active" : "admin-tab"} onClick={() => setTab("faq")}>
+          Preguntas frecuentes
+        </button>
       </div>
 
       {actionError ? <div className="error-box">{actionError}</div> : null}
@@ -770,11 +823,11 @@ export function AdminDashboardScreen({ authToken, categories, currentUserId }: P
                   <h3>Ingresos {statsFrom || statsTo ? "— rango seleccionado" : "— últimos 7 días"}</h3>
                   <ResponsiveContainer width="100%" height={240}>
                     <AreaChart data={revenueByDay}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#fed7aa" />
-                      <XAxis dataKey="label" stroke="#7c2d12" fontSize={12} />
-                      <YAxis stroke="#7c2d12" fontSize={12} width={70} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                      <XAxis dataKey="label" stroke="var(--text-muted)" fontSize={12} />
+                      <YAxis stroke="var(--text-muted)" fontSize={12} width={70} />
                       <Tooltip formatter={(value: number) => formatMoney(value)} />
-                      <Area type="monotone" dataKey="total" name="Ingresos" stroke="#f97316" fill="#fed7aa" />
+                      <Area type="monotone" dataKey="total" name="Ingresos" stroke="#3a9fdb" fill="#9fd3f2" />
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
@@ -786,11 +839,11 @@ export function AdminDashboardScreen({ authToken, categories, currentUserId }: P
                   ) : (
                     <ResponsiveContainer width="100%" height={240}>
                       <BarChart data={filteredTopProducts} layout="vertical" margin={{ left: 24 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#fed7aa" />
-                        <XAxis type="number" stroke="#7c2d12" fontSize={12} allowDecimals={false} />
-                        <YAxis type="category" dataKey="name" width={130} stroke="#7c2d12" fontSize={11} />
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                        <XAxis type="number" stroke="var(--text-muted)" fontSize={12} allowDecimals={false} />
+                        <YAxis type="category" dataKey="name" width={130} stroke="var(--text-muted)" fontSize={11} />
                         <Tooltip />
-                        <Bar dataKey="totalQuantity" name="Unidades" fill="#f97316" radius={[0, 6, 6, 0]} />
+                        <Bar dataKey="totalQuantity" name="Unidades" fill="#65b9e9" radius={[0, 6, 6, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
                   )}
@@ -873,20 +926,21 @@ export function AdminDashboardScreen({ authToken, categories, currentUserId }: P
                       <td>{order.items.reduce((sum, i) => sum + i.quantity, 0)}</td>
                       <td>{formatMoney(order.total)}</td>
                       <td>
-                        <span className="status-badge">{order.estado}</span>
+                        <span className={`status-badge tone-${statusTone(order.estado)}`}>{order.estado}</span>
                       </td>
                       <td>
                         <select
                           value=""
+                          aria-label={`Cambiar el estado del pedido ${order.id}`}
+                          disabled={!NEXT_ORDER_STATES[order.estado]}
                           onChange={(e) => {
                             if (e.target.value) void handleOrderStatusChange(order, e.target.value);
                           }}
                         >
-                          <option value="">Cambiar estado...</option>
-                          <option value="PENDIENTE">PENDIENTE</option>
-                          <option value="COMPLETADA">COMPLETADA</option>
-                          <option value="ENVIADA">ENVIADA</option>
-                          <option value="CANCELADA">CANCELADA</option>
+                          <option value="">{NEXT_ORDER_STATES[order.estado] ? "Cambiar estado..." : "Sin cambios posibles"}</option>
+                          {(NEXT_ORDER_STATES[order.estado] ?? []).map((estado) => (
+                            <option key={estado} value={estado}>{estado}</option>
+                          ))}
                         </select>
                       </td>
                     </tr>
@@ -968,11 +1022,20 @@ export function AdminDashboardScreen({ authToken, categories, currentUserId }: P
             </label>
             <label>
               <span>Tipo de promoción</span>
-              <input
-                placeholder="2x1, 20% OFF..."
+              <select
                 value={productForm.tipoPromocion}
-                onChange={(e) => setProductForm({ ...productForm, tipoPromocion: e.target.value })}
-              />
+                onChange={(e) => handlePromoTypeChange(e.target.value)}
+              >
+                <option value="">Sin tipo</option>
+                {PROMO_TYPES.map((type) => (
+                  <option key={type} value={type}>
+                    {type}
+                  </option>
+                ))}
+                {productForm.tipoPromocion && !PROMO_TYPES.includes(productForm.tipoPromocion) ? (
+                  <option value={productForm.tipoPromocion}>{productForm.tipoPromocion}</option>
+                ) : null}
+              </select>
             </label>
             <label className="admin-form-wide">
               <span>URL de imagen</span>
@@ -1335,7 +1398,7 @@ export function AdminDashboardScreen({ authToken, categories, currentUserId }: P
                         <td>{user.email}</td>
                         <td>{user.role}</td>
                         <td>
-                          <span className="status-badge">{user.active === false ? "Deshabilitado" : "Activo"}</span>
+                          <span className={`status-badge tone-${user.active === false ? "bad" : "ok"}`}>{user.active === false ? "Deshabilitado" : "Activo"}</span>
                         </td>
                         <td>
                           <div className="admin-row-actions">
@@ -1367,6 +1430,19 @@ export function AdminDashboardScreen({ authToken, categories, currentUserId }: P
             </div>
           )}
         </section>
+      ) : null}
+
+      {tab === "faq" ? <FaqSettings authToken={authToken} items={faq} onSaved={onFaqChange} /> : null}
+
+      {tab === "cartpromos" ? (
+        <>
+          <ShippingZonesSettings authToken={authToken} />
+          <CartPromosSettings authToken={authToken} promos={cartPromos} onSaved={onCartPromosChange} />
+        </>
+      ) : null}
+
+      {tab === "announcements" ? (
+        <AnnouncementSettings authToken={authToken} settings={siteSettings} onSaved={onSiteSettingsChange} />
       ) : null}
 
       {tab === "coupons" ? (
@@ -1407,9 +1483,11 @@ export function AdminDashboardScreen({ authToken, categories, currentUserId }: P
               />
             </label>
             <label>
-              <span>Usos máximos (vacío = ilimitado)</span>
+              <span>Usos máximos</span>
               <input
                 type="number"
+                min="1"
+                placeholder="Ilimitado"
                 value={couponForm.maxUses}
                 onChange={(e) => setCouponForm({ ...couponForm, maxUses: e.target.value })}
               />
@@ -1479,7 +1557,7 @@ export function AdminDashboardScreen({ authToken, categories, currentUserId }: P
                       </td>
                       <td>{coupon.expiresAt ? new Date(coupon.expiresAt).toLocaleDateString("es-AR") : "—"}</td>
                       <td>
-                        <span className="status-badge">{coupon.active ? "Activo" : "Inactivo"}</span>
+                        <span className={`status-badge tone-${coupon.active ? "ok" : "bad"}`}>{coupon.active ? "Activo" : "Inactivo"}</span>
                       </td>
                       <td>
                         <div className="admin-row-actions">
