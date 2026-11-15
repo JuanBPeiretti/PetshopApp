@@ -3,6 +3,8 @@ package com.petshop.app.service;
 import com.petshop.app.dto.VentaDTO;
 import com.petshop.app.dto.VentaRequest;
 import com.petshop.app.model.CartItem;
+import com.petshop.app.model.EstadoVenta;
+import com.petshop.app.model.TransicionInvalidaException;
 import com.petshop.app.model.Coupon;
 import com.petshop.app.model.IdempotencyRecord;
 import com.petshop.app.model.Order;
@@ -247,9 +249,10 @@ public class VentaService {
     }
 
     public VentaOutcome cancelarPorSolicitud(Order order) {
-        if (!PAGO_PENDIENTE.equals(order.estado) && !COMPLETADA.equals(order.estado)) {
-            return problem(409, "transicion-invalida", "No se puede cancelar",
-                    "Una venta en estado " + order.estado + " no se puede cancelar.");
+        try {
+            estadoActual(order, "cancelar").cancelar(); // solo valida: el cambio real lo hace cancelar(order, motivo)
+        } catch (TransicionInvalidaException e) {
+            return problem(409, "transicion-invalida", "No se puede cancelar", e.getMessage());
         }
         // Si ya se cobró por MercadoPago, primero se devuelve el dinero: si eso falla, el pedido no se cancela
         if (esMercadoPago(order) && "APROBADO".equals(order.estadoPago) && order.mpPaymentId != null) {
@@ -267,11 +270,11 @@ public class VentaService {
 
     public VentaOutcome cambiarEstado(Order order, String nuevoEstado) {
         if (ENVIADA.equals(nuevoEstado)) {
-            if (!COMPLETADA.equals(order.estado)) {
-                return problem(409, "transicion-invalida", "Transición inválida",
-                        "Solo una venta COMPLETADA puede pasar a ENVIADA.");
+            try {
+                order.estado = estadoActual(order, "enviar").enviar().name();
+            } catch (TransicionInvalidaException e) {
+                return problem(409, "transicion-invalida", "Transición inválida", e.getMessage());
             }
-            order.estado = ENVIADA;
             orderRepository.save(order);
             return new VentaOutcome(200, order, null, null, null);
         }
@@ -432,14 +435,20 @@ public class VentaService {
         cancelar(order, "No se pudo procesar el pago tras " + maxAttempts + " intentos");
     }
 
+    /** El estado actual de la venta como objeto State; si el valor guardado no es un estado conocido, ninguna acción es válida. */
+    private static EstadoVenta estadoActual(Order order, String accion) {
+        return EstadoVenta.de(order.estado).orElseThrow(() -> new TransicionInvalidaException(String.valueOf(order.estado), accion));
+    }
+
     private void confirmar(Order order) {
-        order.estado = COMPLETADA;
+        order.estado = estadoActual(order, "confirmar").confirmar().name();
         order.estadoPago = "APROBADO";
         orderRepository.save(order);
         publisher.publishEvent(new VentaEvents.VentaConfirmada(order.id, order.userId, order.total));
     }
 
     private void cancelar(Order order, String motivo) {
+        EstadoVenta siguiente = estadoActual(order, "cancelar").cancelar(); // antes de tocar stock y cupón
         boolean estabaPagada = "APROBADO".equals(order.estadoPago);
         liberarStock(order);
         if (order.couponCode != null) {
@@ -448,7 +457,7 @@ public class VentaService {
                 couponRepository.save(c);
             });
         }
-        order.estado = CANCELADA;
+        order.estado = siguiente.name();
         order.estadoPago = estabaPagada ? "REEMBOLSADO" : "CANCELADO";
         orderRepository.save(order);
         publisher.publishEvent(new VentaEvents.VentaCancelada(order.id, order.userId, motivo));

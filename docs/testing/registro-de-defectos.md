@@ -20,6 +20,7 @@ Todos los defectos de esta tabla los encontraron las propias pruebas (no la cát
 | D-14 | Menor | Prueba de frontend inestable: 1 de 3 corridas en el CI | Revisaba `document.title` antes de que el efecto lo actualizara | Espera con `waitFor` |
 | D-15 | Menor | OpenAPI inexacto: 11 endpoints de lista documentados como `object`; campos nulos como `string` | `ResponseEntity<?>` sin esquema | Esquemas declarados; Schemathesis 902/902 |
 | D-16 | Menor | Orden de títulos saltado (h1→h4) y producto sin nombre dejaba la imagen sin `alt` | Estructura del pie y de la grilla | Título oculto de nivel 2, pie en h3, `alt` de reemplazo |
+| D-17 | Mayor | **Cualquier cambio de estado en el panel de administrador**: `PUT /api/orders/{id}/status` aceptaba cualquier transición (reactivar una venta cancelada, enviar una que nunca se pagó) sin liberar stock ni reembolsar | Ruta histórica que asignaba el texto del estado sin validar; las reglas de transición estaban en `if` sueltos | Patrón State (`EstadoVenta`): toda transición pasa por la máquina y responde 409 si no se permite; el panel solo ofrece las válidas ([ADR 0003](../adr/0003-patron-state-en-la-venta.md)) |
 
 ## Defectos abiertos
 | Sev. | Descripción | Mitigación |

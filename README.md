@@ -81,6 +81,13 @@ python tests-api/sonda_seguridad.py     # desde app/
 - **Concurrencia.** `GET /api/v1/ventas/{id}` y `GET /api/products/{id}` devuelven un `ETag`; `PATCH /api/v1/ventas/{id}` y
   `PUT /api/products/{id}` aceptan `If-Match` y responden **412** si el recurso cambió desde que se leyó.
 
+## Decisiones de arquitectura (ADR)
+
+Cada patrón y cada decisión de diseño tiene su registro en [`docs/adr/`](docs/adr/README.md): arquitectura en capas, API REST con
+Problem Details, **State** (ciclo de vida de la venta: una transición inválida responde **409**), **Strategy** (orden de productos),
+**Adapter** (pasarelas SOAP y MercadoPago), **Outbox**, **consumidor idempotente con DLQ**, Idempotency-Key, ETag, reserva atómica de
+stock, JWT con roles y timeout con fallback del pago.
+
 ## Variables de entorno
 
 ### Backend

@@ -5547,6 +5547,150 @@
      }
     },
     {
+     "name": "Enviar un pedido que ya no admite el envío: 409 (patrón State)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"estado 409\", function () { pm.expect([409]).to.include(pm.response.code); });"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "PUT",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "X-Auth-Token",
+        "value": "{{adminToken}}"
+       }
+      ],
+      "url": {
+       "raw": "{{baseUrl}}/api/orders/{{pedidoId}}/status",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "api",
+        "orders",
+        "{{pedidoId}}",
+        "status"
+       ]
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"estado\": \"ENVIADA\"}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    },
+    {
+     "name": "Cambiar un pedido a un estado que no existe: 422",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"estado 422\", function () { pm.expect([422]).to.include(pm.response.code); });"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "PUT",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "X-Auth-Token",
+        "value": "{{adminToken}}"
+       }
+      ],
+      "url": {
+       "raw": "{{baseUrl}}/api/orders/{{pedidoId}}/status",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "api",
+        "orders",
+        "{{pedidoId}}",
+        "status"
+       ]
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"estado\": \"EN_LA_LUNA\"}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    },
+    {
+     "name": "Cambiar el estado de un pedido sin indicar el estado: 400",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"estado 400\", function () { pm.expect([400]).to.include(pm.response.code); });"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "PUT",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "X-Auth-Token",
+        "value": "{{adminToken}}"
+       }
+      ],
+      "url": {
+       "raw": "{{baseUrl}}/api/orders/{{pedidoId}}/status",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "api",
+        "orders",
+        "{{pedidoId}}",
+        "status"
+       ]
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    },
+    {
      "name": "Cambiar el estado de un pedido como cliente",
      "event": [
       {

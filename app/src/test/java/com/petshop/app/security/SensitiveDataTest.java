@@ -231,7 +231,8 @@ class SensitiveDataTest {
         OrderRepository repository = mock(OrderRepository.class);
         when(repository.findByUserIdOrderByFechaDesc("user-1")).thenReturn(List.of(order));
         when(repository.findAllByOrderByFechaDesc()).thenReturn(List.of(order));
-        return new OrderController(repository, mock(ProductRepository.class), jwtUtil, new AdminGuard(jwtUtil));
+        return new OrderController(repository, mock(ProductRepository.class), jwtUtil, new AdminGuard(jwtUtil),
+                mock(com.petshop.app.service.VentaService.class));
     }
 
     @Test

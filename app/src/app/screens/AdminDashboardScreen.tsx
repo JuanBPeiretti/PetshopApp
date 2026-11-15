@@ -106,6 +106,12 @@ const EMPTY_PRODUCT_FORM = {
   tipoPromocion: "",
 };
 
+/** Estados a los que puede pasar un pedido (espejo de la máquina de estados del backend, EstadoVenta): ENVIADA y CANCELADA son finales. */
+const NEXT_ORDER_STATES: Record<string, string[]> = {
+  PAGO_PENDIENTE: ["CANCELADA"],
+  COMPLETADA: ["ENVIADA", "CANCELADA"],
+};
+
 export function AdminDashboardScreen({ authToken, categories, currentUserId, siteSettings, onSiteSettingsChange, cartPromos, onCartPromosChange, faq, onFaqChange }: Props) {
   const [tab, setTab] = useState<Tab>("stats");
 
@@ -925,15 +931,16 @@ export function AdminDashboardScreen({ authToken, categories, currentUserId, sit
                       <td>
                         <select
                           value=""
+                          aria-label={`Cambiar el estado del pedido ${order.id}`}
+                          disabled={!NEXT_ORDER_STATES[order.estado]}
                           onChange={(e) => {
                             if (e.target.value) void handleOrderStatusChange(order, e.target.value);
                           }}
                         >
-                          <option value="">Cambiar estado...</option>
-                          <option value="PENDIENTE">PENDIENTE</option>
-                          <option value="COMPLETADA">COMPLETADA</option>
-                          <option value="ENVIADA">ENVIADA</option>
-                          <option value="CANCELADA">CANCELADA</option>
+                          <option value="">{NEXT_ORDER_STATES[order.estado] ? "Cambiar estado..." : "Sin cambios posibles"}</option>
+                          {(NEXT_ORDER_STATES[order.estado] ?? []).map((estado) => (
+                            <option key={estado} value={estado}>{estado}</option>
+                          ))}
                         </select>
                       </td>
                     </tr>

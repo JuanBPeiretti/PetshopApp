@@ -9,6 +9,7 @@ import com.petshop.app.repository.OrderRepository;
 import com.petshop.app.repository.ProductRepository;
 import com.petshop.app.service.AdminGuard;
 import com.petshop.app.service.JwtUtil;
+import com.petshop.app.service.VentaService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -17,7 +18,6 @@ import java.time.ZoneId;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import com.petshop.app.config.AdminOnly;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -28,15 +28,15 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 @RequestMapping("/api/orders")
 public class OrderController {
 
-    private static final Set<String> VALID_STATUSES = Set.of("PENDIENTE", "COMPLETADA", "ENVIADA", "CANCELADA");
-
     private final OrderRepository orderRepository;
     private final ProductRepository productRepository;
     private final JwtUtil jwtUtil;
     private final AdminGuard adminGuard;
+    private final VentaService ventaService;
 
     public OrderController(OrderRepository orderRepository, ProductRepository productRepository,
-                            JwtUtil jwtUtil, AdminGuard adminGuard) {
+                            JwtUtil jwtUtil, AdminGuard adminGuard, VentaService ventaService) {
+        this.ventaService = ventaService;
         this.orderRepository = orderRepository;
         this.productRepository = productRepository;
         this.jwtUtil = jwtUtil;
@@ -117,12 +117,16 @@ public class OrderController {
         }
 
         String nuevoEstado = body.get("estado");
-        if (nuevoEstado == null || !VALID_STATUSES.contains(nuevoEstado)) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Estado inválido, debe ser uno de: " + VALID_STATUSES));
+        if (nuevoEstado == null || nuevoEstado.isBlank()) {
+            return Problems.of(400, "estado-requerido", "Estado requerido", "Falta el campo 'estado'.");
         }
 
-        order.estado = nuevoEstado;
-        orderRepository.save(order);
-        return ResponseEntity.ok(OrderDTO.forAdmin(order));
+        // El cambio pasa por la máquina de estados de la venta (patrón State): una transición que el estado actual no
+        // permite responde 409, y cancelar libera el stock y reembolsa si ya se cobró.
+        VentaService.VentaOutcome outcome = ventaService.cambiarEstado(order, nuevoEstado);
+        if (outcome.isProblem()) {
+            return Problems.of(outcome.status(), outcome.problemSlug(), outcome.problemTitle(), outcome.problemDetail());
+        }
+        return ResponseEntity.ok(OrderDTO.forAdmin(outcome.order()));
     }
 }
